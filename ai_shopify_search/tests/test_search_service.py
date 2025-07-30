@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from search_service import SearchService
+from legacy.search_service import SearchService
 from core.models import Product, QuerySuggestion, PopularSearch
 
 class TestSearchService:

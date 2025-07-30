@@ -10,7 +10,7 @@ from embeddings import generate_embedding
 from core.database import get_db
 from cache_manager import cache_manager
 from analytics_manager import analytics_manager
-from search_service import search_service
+from legacy.search_service import search_service
 from rate_limiter import rate_limiter
 from metrics import metrics_collector
 from price_intent import extract_price_intent, clean_query_from_price_intent, format_price_message

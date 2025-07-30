@@ -55,7 +55,7 @@ def main():
     
     # Run unit tests with coverage
     print("\n🧪 Running unit tests...")
-    unit_test_command = "python -m pytest tests/unit/ -v --cov=. --cov-report=term-missing --cov-report=html --cov-fail-under=35"
+    unit_test_command = "python3 -m pytest tests/unit/ -v --cov=. --cov-report=term-missing --cov-report=html --cov-fail-under=80"
     
     if not run_command(unit_test_command, "Unit tests"):
         print("❌ Unit tests failed")
@@ -63,7 +63,7 @@ def main():
     
     # Run integration tests
     print("\n🔗 Running integration tests...")
-    integration_test_command = "python -m pytest tests/integration/ -v --cov=. --cov-report=term-missing --cov-report=html --cov-append"
+    integration_test_command = "python3 -m pytest tests/integration/ -v --cov=. --cov-report=term-missing --cov-report=html --cov-append"
     
     if not run_command(integration_test_command, "Integration tests"):
         print("❌ Integration tests failed")
@@ -71,7 +71,7 @@ def main():
     
     # Run API tests
     print("\n🌐 Running API tests...")
-    api_test_command = "python -m pytest tests/test_api_endpoints.py tests/test_search_service.py -v --cov=. --cov-report=term-missing --cov-report=html --cov-append"
+    api_test_command = "python3 -m pytest tests/test_api_endpoints.py tests/test_search_service.py -v --cov=. --cov-report=term-missing --cov-report=html --cov-append"
     
     if not run_command(api_test_command, "API tests"):
         print("❌ API tests failed")
@@ -79,7 +79,7 @@ def main():
     
     # Generate final coverage report
     print("\n📊 Generating final coverage report...")
-    coverage_report_command = "python -m pytest --cov=. --cov-report=term-missing --cov-report=html --cov-fail-under=80"
+    coverage_report_command = "python3 -m pytest --cov=. --cov-report=term-missing --cov-report=html --cov-fail-under=80"
     
     if not run_command(coverage_report_command, "Final coverage report"):
         print("❌ Coverage report generation failed")
