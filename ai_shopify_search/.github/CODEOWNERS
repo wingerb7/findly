@@ -1,0 +1,61 @@
+# Global owners
+* @bartwingelaar
+
+# Core application files
+/main.py @bartwingelaar
+/config.py @bartwingelaar
+/requirements.txt @bartwingelaar
+
+# Database and models
+/core/ @bartwingelaar
+/core/database.py @bartwingelaar
+/core/database_async.py @bartwingelaar
+/core/models.py @bartwingelaar
+
+# Services
+/services/ @bartwingelaar
+/services/__init__.py @bartwingelaar
+/services/ai_search_service.py @bartwingelaar
+/services/cache_service.py @bartwingelaar
+/services/analytics_service.py @bartwingelaar
+
+# API routes
+/api/ @bartwingelaar
+/api/products_v2.py @bartwingelaar
+
+# Utilities
+/utils/ @bartwingelaar
+/utils/privacy_utils.py @bartwingelaar
+/utils/validation.py @bartwingelaar
+/utils/error_handling.py @bartwingelaar
+
+# Tests
+/tests/ @bartwingelaar
+/tests/unit/ @bartwingelaar
+/tests/integration/ @bartwingelaar
+/tests/performance/ @bartwingelaar
+
+# Configuration files
+/config/ @bartwingelaar
+/config/prometheus.yml @bartwingelaar
+/config/grafana_dashboard.json @bartwingelaar
+
+# CI/CD
+/.github/ @bartwingelaar
+/.github/workflows/ @bartwingelaar
+/Dockerfile @bartwingelaar
+/docker-compose.yml @bartwingelaar
+
+# Documentation
+/docs/ @bartwingelaar
+/README.md @bartwingelaar
+
+# Security and privacy
+/privacy_utils.py @bartwingelaar
+/validation.py @bartwingelaar
+/error_handling.py @bartwingelaar
+
+# Performance and monitoring
+/performance_monitor.py @bartwingelaar
+/metrics.py @bartwingelaar
+/rate_limiter.py @bartwingelaar 
