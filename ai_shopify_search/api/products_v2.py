@@ -178,10 +178,9 @@ async def ai_search_products(
                 "client_ip": client_ip
             }
         )
-    
-    start_time = time.time()
-    
-    try:
+        
+        start_time = time.time()
+        
         # Get client IP for rate limiting
         client_ip = ip_address or request.client.host
         
