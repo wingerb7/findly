@@ -4,7 +4,7 @@ from sqlalchemy import text
 from api import products_v2
 from core.database import Base, engine
 from config import DATABASE_URL
-from utils.error_handling import error_handler_middleware
+from error_handlers import error_handler_middleware
 
 # Configure logging
 logging.basicConfig(

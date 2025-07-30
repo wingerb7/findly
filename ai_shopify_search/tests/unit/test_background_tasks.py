@@ -13,13 +13,14 @@ from unittest.mock import Mock, patch, MagicMock
 # Add the current directory to the path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from background_tasks import (
-    log_analytics_task,
-    update_popular_searches_task,
-    cleanup_expired_data_task,
-    update_search_suggestions_task,
-    process_product_import_task
-)
+# Background tasks are now handled by the task manager
+# from background_tasks import (
+#     log_analytics_task,
+#     update_popular_searches_task,
+#     cleanup_expired_data_task,
+#     update_search_suggestions_task,
+#     process_product_import_task
+# )
 
 
 class TestBackgroundTasks:

@@ -12,14 +12,13 @@ from typing import Dict, Any
 # Add the current directory to the path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from database_async import AsyncDatabaseManager, DatabaseError, QueryTimeoutError
+from core.database_async import AsyncDatabaseService
 from utils.error_handling import (
     ErrorHandler, BaseError, ValidationError, DatabaseError as EHDatabaseError,
     NetworkError, RateLimitError, handle_errors, retry_on_error
 )
 from performance_monitor import (
-    PerformanceMonitor, MetricType, monitor_performance,
-    monitor_database_performance, monitor_api_performance
+    PerformanceMonitor, monitor_sync, monitor_async, monitor_operation
 )
 from background_tasks import (
     BackgroundTaskManager, TaskStatus, TaskPriority,
@@ -34,7 +33,7 @@ async def test_async_database():
     
     try:
         # Create database manager
-        db_manager = AsyncDatabaseManager()
+        db_manager = AsyncDatabaseService()
         
         print("1. Database manager creation...")
         print("   ✅ Async Database Manager created successfully")
@@ -69,9 +68,12 @@ async def test_async_database():
         # Test error classes
         print("\n4. Testing error classes...")
         
+        # Use error handling errors instead
+        from utils.error_handling import DatabaseError as EHDatabaseError
+        
         error_classes = [
-            DatabaseError("Test database error"),
-            QueryTimeoutError("Test timeout error")
+            EHDatabaseError("Test database error"),
+            Exception("Test timeout error")
         ]
         
         for error in error_classes:
@@ -252,7 +254,7 @@ async def test_decorators():
         # Test performance monitoring decorator
         print("1. Testing performance monitoring decorator...")
         
-        @monitor_performance("test_function", {"test": "decorator"})
+        @monitor_sync("test_function")
         async def test_function():
             await asyncio.sleep(0.1)
             return "Function completed"
@@ -263,7 +265,7 @@ async def test_decorators():
         # Test database performance decorator
         print("\n2. Testing database performance decorator...")
         
-        @monitor_database_performance("test_query")
+        @monitor_async("test_query")
         async def test_database_query():
             await asyncio.sleep(0.05)
             return "Query completed"
@@ -274,7 +276,7 @@ async def test_decorators():
         # Test API performance decorator
         print("\n3. Testing API performance decorator...")
         
-        @monitor_api_performance("test_endpoint")
+        @monitor_async("test_endpoint")
         async def test_api_endpoint():
             await asyncio.sleep(0.05)
             return "API call completed"
@@ -324,7 +326,7 @@ async def test_integration():
         print("1. Testing background task with performance monitoring...")
         
         @background_task("integration_test", TaskPriority.HIGH)
-        @monitor_performance("integration_task")
+        @monitor_async("integration_task")
         async def integration_task():
             await asyncio.sleep(0.1)
             return "Integration task completed"
@@ -336,7 +338,7 @@ async def test_integration():
         print("\n2. Testing error handling with performance monitoring...")
         
         @handle_errors
-        @monitor_performance("error_test")
+        @monitor_async("error_test")
         async def error_test_function():
             await asyncio.sleep(0.05)
             raise DatabaseError("Test database error", operation="test")
@@ -352,7 +354,7 @@ async def test_integration():
         retry_count = 0
         
         @retry_on_error(max_retries=2, delay=0.1)
-        @monitor_performance("retry_test")
+        @monitor_async("retry_test")
         async def retry_test_function():
             nonlocal retry_count
             retry_count += 1

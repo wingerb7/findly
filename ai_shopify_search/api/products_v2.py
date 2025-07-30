@@ -20,17 +20,18 @@ from utils.validation import (
     log_security_event
 )
 from utils.privacy_utils import sanitize_log_data
-from utils.error_handling import (
+from error_handlers import (
     validate_search_parameters, 
     validate_analytics_parameters,
     safe_database_operation,
     safe_cache_operation,
     safe_embedding_operation
 )
-from background_tasks import (
-    log_analytics_task,
-    update_popular_searches_task
-)
+# Background tasks will be handled by the task manager
+# from background_tasks import (
+#     log_analytics_task,
+#     update_popular_searches_task
+# )
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -237,27 +238,22 @@ async def ai_search_products(
             results_count=result.get("count", 0)
         )
         
-        # Add background tasks for analytics
-        background_tasks.add_task(
-            log_analytics_task,
-            query=query,
-            search_type="ai",
-            filters={},
-            results_count=result.get("count", 0),
-            page=page,
-            limit=limit,
-            response_time_ms=response_time * 1000,
-            cache_hit=result.get("cache_hit", False),
-            user_agent=user_agent,
-            ip_address=client_ip,
-            db=db
-        )
-        
-        background_tasks.add_task(
-            update_popular_searches_task,
-            query=query,
-            db=db
-        )
+        # Log analytics (synchronous for now)
+        try:
+            analytics_manager.track_search(
+                query=query,
+                search_type="ai",
+                filters={},
+                results_count=result.get("count", 0),
+                page=page,
+                limit=limit,
+                response_time=response_time,
+                cache_hit=result.get("cache_hit", False),
+                user_agent=user_agent,
+                client_ip=client_ip
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log analytics: {e}")
         
         return result
         

@@ -5,7 +5,7 @@ Performance monitoring service for tracking async operations and database perfor
 import time
 import asyncio
 import logging
-from typing import Dict, Any, Optional, Callable, Awaitable
+from typing import Dict, Any, Optional, Callable, Awaitable, List
 from functools import wraps
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
