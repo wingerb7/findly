@@ -6,7 +6,7 @@ import logging
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 
-from models import QuerySuggestion, PopularSearch, Product
+from core.models import QuerySuggestion, PopularSearch, Product
 
 logger = logging.getLogger(__name__)
 

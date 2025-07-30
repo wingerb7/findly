@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 from search_service import SearchService
-from models import Product, QuerySuggestion, PopularSearch
+from core.models import Product, QuerySuggestion, PopularSearch
 
 class TestSearchService:
     """Test cases for SearchService."""

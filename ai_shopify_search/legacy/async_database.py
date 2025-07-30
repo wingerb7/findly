@@ -48,7 +48,7 @@ async def get_async_db():
             await session.close()
 
 # Keep sync session for backward compatibility
-from database import SessionLocal
+from core.database import SessionLocal
 
 def get_db():
     """Sync database dependency (for backward compatibility)."""

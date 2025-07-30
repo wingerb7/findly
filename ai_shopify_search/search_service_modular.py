@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 
 from services import service_factory
-from database_async import get_async_db
+from core.database_async import get_async_db
 
 logger = logging.getLogger(__name__)
 

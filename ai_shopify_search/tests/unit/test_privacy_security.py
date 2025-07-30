@@ -12,11 +12,11 @@ from typing import Dict, Any
 # Add the current directory to the path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from privacy_utils import (
+from utils.privacy_utils import (
     anonymize_ip, sanitize_user_agent, generate_session_id, 
     is_session_expired, sanitize_log_data
 )
-from validation import (
+from utils.validation import (
     sanitize_search_query, validate_price_range, generate_secure_cache_key,
     validate_api_key, validate_rate_limit_identifier
 )

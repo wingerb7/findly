@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, Float, ForeignKey, TIMESTAMP, Bo
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from database import Base
+from .database import Base
 from config import DATABASE_URL
 
 # Conditional imports for PostgreSQL vs SQLite

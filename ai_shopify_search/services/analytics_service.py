@@ -8,11 +8,11 @@ import time
 from typing import Dict, Any, Optional, List
 from sqlalchemy.orm import Session
 from datetime import datetime, date, timedelta
-from models import (
+from core.models import (
     SearchAnalytics, SearchClick, SearchPerformance, 
     PopularSearch, FacetUsage, QuerySuggestion, SearchCorrection
 )
-from privacy_utils import (
+from utils.privacy_utils import (
     anonymize_ip, sanitize_user_agent, generate_session_id, 
     is_session_expired, sanitize_log_data, DataRetentionManager, PRIVACY_CONFIG
 )

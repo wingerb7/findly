@@ -8,8 +8,8 @@ from unittest.mock import Mock, patch
 import redis
 
 from main import app
-from database import Base, get_db
-from models import Product, SearchAnalytics, PopularSearch
+from core.database import Base, get_db
+from core.models import Product, SearchAnalytics, PopularSearch
 from cache_manager import cache_manager
 from analytics_manager import analytics_manager
 

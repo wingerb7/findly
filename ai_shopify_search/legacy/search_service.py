@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from difflib import SequenceMatcher
-from models import Product, QuerySuggestion, SearchCorrection, PopularSearch
+from core.models import Product, QuerySuggestion, SearchCorrection, PopularSearch
 from embeddings import generate_embedding
 from cache_manager import cache_manager
 from analytics_manager import analytics_manager

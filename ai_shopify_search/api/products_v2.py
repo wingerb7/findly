@@ -4,23 +4,23 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, Request,
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
-from models import Product, FacetUsage
+from core.models import Product, FacetUsage
 from shopify_client import get_products
 from embeddings import generate_embedding
-from database import get_db
+from core.database import get_db
 from cache_manager import cache_manager
 from analytics_manager import analytics_manager
 from search_service import search_service
 from rate_limiter import rate_limiter
 from metrics import metrics_collector
 from price_intent import extract_price_intent, clean_query_from_price_intent, format_price_message
-from validation import (
+from utils.validation import (
     AISearchQuery, AnalyticsQuery, sanitize_search_query, 
     validate_price_range, generate_secure_cache_key, validate_rate_limit_identifier,
     log_security_event
 )
-from privacy_utils import sanitize_log_data
-from error_handlers import (
+from utils.privacy_utils import sanitize_log_data
+from utils.error_handling import (
     validate_search_parameters, 
     validate_analytics_parameters,
     safe_database_operation,
@@ -574,7 +574,7 @@ async def get_privacy_status():
     """
     Get privacy compliance status and configuration.
     """
-    from privacy_utils import PRIVACY_CONFIG
+    from utils.privacy_utils import PRIVACY_CONFIG
     
     return {
         "privacy_compliance": {

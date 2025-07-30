@@ -81,7 +81,7 @@ class TestAPIEndpoints:
     def test_autocomplete_endpoint_success(self, client, db_session):
         """Test autocomplete endpoint."""
         # Add test suggestions
-        from models import QuerySuggestion
+        from core.models import QuerySuggestion
         
         suggestion = QuerySuggestion(
             query="blue",

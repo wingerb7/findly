@@ -8,10 +8,10 @@ import time
 from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from models import Product
+from core.models import Product
 from embeddings import generate_embedding
-from validation import validate_price_range, generate_secure_cache_key
-from privacy_utils import sanitize_log_data
+from utils.validation import validate_price_range, generate_secure_cache_key
+from utils.privacy_utils import sanitize_log_data
 
 logger = logging.getLogger(__name__)
 

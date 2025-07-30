@@ -13,7 +13,7 @@ from typing import Dict, Any
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from database_async import AsyncDatabaseManager, DatabaseError, QueryTimeoutError
-from error_handling import (
+from utils.error_handling import (
     ErrorHandler, BaseError, ValidationError, DatabaseError as EHDatabaseError,
     NetworkError, RateLimitError, handle_errors, retry_on_error
 )

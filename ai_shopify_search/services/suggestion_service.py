@@ -9,7 +9,7 @@ from difflib import SequenceMatcher
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from models import QuerySuggestion, SearchCorrection, PopularSearch, Product
+from core.models import QuerySuggestion, SearchCorrection, PopularSearch, Product
 
 logger = logging.getLogger(__name__)
 

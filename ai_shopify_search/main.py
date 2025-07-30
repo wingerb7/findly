@@ -1,10 +1,10 @@
 import logging
 from fastapi import FastAPI, Request
 from sqlalchemy import text
-import products_v2
-from database import Base, engine
+from api import products_v2
+from core.database import Base, engine
 from config import DATABASE_URL
-from error_handlers import error_handler_middleware
+from utils.error_handling import error_handler_middleware
 
 # Configure logging
 logging.basicConfig(
