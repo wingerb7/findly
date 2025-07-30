@@ -1,6 +1,6 @@
 import logging
 import time
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
@@ -13,6 +13,17 @@ from ai_shopify_search.analytics_manager import analytics_manager
 from ai_shopify_search.search_service import search_service
 from ai_shopify_search.rate_limiter import rate_limiter
 from ai_shopify_search.metrics import metrics_collector
+from ai_shopify_search.error_handlers import (
+    validate_search_parameters, 
+    validate_analytics_parameters,
+    safe_database_operation,
+    safe_cache_operation,
+    safe_embedding_operation
+)
+from ai_shopify_search.background_tasks import (
+    log_analytics_task,
+    update_popular_searches_task
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -117,6 +128,7 @@ async def import_products(db: Session = Depends(get_db)):
 async def ai_search_products(
     request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
     query: str = Query(..., description="Natural search term"),
     page: int = Query(1, ge=1, description="Page number (starts at 1)"),
     limit: int = Query(25, ge=1, le=100, description="Number of results per page (max 100)"),
@@ -127,6 +139,9 @@ async def ai_search_products(
     db: Session = Depends(get_db)
 ):
     """AI-powered product search with rate limiting and metrics."""
+    # Validate input parameters
+    validate_search_parameters(query, page, limit)
+    
     start_time = time.time()
     
     try:
@@ -170,6 +185,28 @@ async def ai_search_products(
             cache_hit=result.get("cache_hit", False),
             response_time=response_time,
             results_count=result.get("count", 0)
+        )
+        
+        # Add background tasks for analytics
+        background_tasks.add_task(
+            log_analytics_task,
+            query=query,
+            search_type="ai",
+            filters={},
+            results_count=result.get("count", 0),
+            page=page,
+            limit=limit,
+            response_time_ms=response_time * 1000,
+            cache_hit=result.get("cache_hit", False),
+            user_agent=user_agent,
+            ip_address=client_ip,
+            db=db
+        )
+        
+        background_tasks.add_task(
+            update_popular_searches_task,
+            query=query,
+            db=db
         )
         
         return result
