@@ -1,25 +1,27 @@
 import logging
-import uuid
 import time
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Dict, Any, Optional, List
 from sqlalchemy.orm import Session
-from ai_shopify_search.models import (
+from models import (
     SearchAnalytics, SearchClick, SearchPerformance, 
     PopularSearch, FacetUsage, QuerySuggestion, SearchCorrection
+)
+from privacy_utils import (
+    anonymize_ip, sanitize_user_agent, generate_session_id, 
+    is_session_expired, sanitize_log_data, DataRetentionManager, PRIVACY_CONFIG
 )
 
 logger = logging.getLogger(__name__)
 
 class AnalyticsManager:
-    """Centralized analytics management for search tracking and insights."""
+    """Centralized analytics management for search tracking and insights with GDPR compliance."""
     
     def __init__(self):
-        self.session_id_generator = self._generate_session_id
-    
-    def _generate_session_id(self) -> str:
-        """Generate a unique session ID."""
-        return str(uuid.uuid4())
+        self.session_id_generator = generate_session_id
+        self.data_retention_manager = DataRetentionManager(
+            default_retention_days=PRIVACY_CONFIG["search_analytics_retention_days"]
+        )
     
     def track_search_analytics(
         self,
@@ -34,14 +36,42 @@ class AnalyticsManager:
         cache_hit: bool,
         user_agent: Optional[str] = None,
         ip_address: Optional[str] = None
-    ) -> int:
-        """Track search analytics and return search_analytics_id."""
+    ) -> Optional[int]:
+        """
+        Track search analytics with GDPR compliance and return search_analytics_id.
+        
+        Args:
+            db: Database session
+            query: Search query (will be sanitized for logging)
+            search_type: Type of search (basic, ai, faceted)
+            filters: Applied filters
+            results_count: Number of results returned
+            page: Page number
+            limit: Results per page
+            response_time_ms: Response time in milliseconds
+            cache_hit: Whether result was from cache
+            user_agent: User agent string (will be sanitized)
+            ip_address: IP address (will be anonymized)
+            
+        Returns:
+            Search analytics ID or None if tracking failed
+        """
         try:
+            # Generate GDPR-compliant session ID
             session_id = self.session_id_generator()
+            
+            # Anonymize IP address for GDPR compliance
+            anonymized_ip = anonymize_ip(ip_address) if ip_address else None
+            
+            # Sanitize user agent for privacy
+            sanitized_user_agent = sanitize_user_agent(user_agent) if user_agent else None
+            
+            # Sanitize query for logging
+            sanitized_query = sanitize_log_data(query, max_length=100)
             
             analytics = SearchAnalytics(
                 session_id=session_id,
-                query=query,
+                query=query,  # Store original query for functionality
                 search_type=search_type,
                 filters=filters,
                 results_count=results_count,
@@ -49,8 +79,8 @@ class AnalyticsManager:
                 limit=limit,
                 response_time_ms=response_time_ms,
                 cache_hit=cache_hit,
-                user_agent=user_agent,
-                ip_address=ip_address
+                user_agent=sanitized_user_agent,
+                ip_address=anonymized_ip
             )
             
             db.add(analytics)
@@ -61,6 +91,13 @@ class AnalyticsManager:
             self._update_popular_search(db, query)
             self._update_facet_usage(db, filters)
             self._update_daily_performance(db, search_type, response_time_ms, cache_hit, results_count)
+            
+            # Log with sanitized data
+            logger.info(
+                f"Search analytics tracked: {sanitized_query} ({search_type}) - "
+                f"{results_count} results, {response_time_ms:.2f}ms, "
+                f"cache_hit={cache_hit}, ip={anonymized_ip}, ua={sanitized_user_agent}"
+            )
             
             return analytics.id
             
@@ -281,6 +318,104 @@ class AnalyticsManager:
         limit: int = 20,
         min_searches: int = 1
     ) -> Dict[str, Any]:
+        """Get popular searches analytics."""
+        try:
+            popular_searches = db.query(PopularSearch).filter(
+                PopularSearch.search_count >= min_searches
+            ).order_by(PopularSearch.search_count.desc()).limit(limit).all()
+            
+            return {
+                "popular_searches": [
+                    {
+                        "query": search.query,
+                        "search_count": search.search_count,
+                        "click_count": search.click_count,
+                        "avg_position_clicked": search.avg_position_clicked,
+                        "last_searched": search.last_searched.isoformat() if search.last_searched else None
+                    }
+                    for search in popular_searches
+                ],
+                "count": len(popular_searches)
+            }
+        except Exception as e:
+            logger.error(f"Error getting popular searches analytics: {e}")
+            return {"popular_searches": [], "count": 0}
+    
+    def cleanup_expired_data(self, db: Session) -> Dict[str, int]:
+        """
+        Clean up expired analytics data based on retention policies.
+        
+        Args:
+            db: Database session
+            
+        Returns:
+            Dictionary with cleanup statistics
+        """
+        try:
+            cleanup_stats = {}
+            
+            # Clean up expired search analytics
+            cutoff_date = self.data_retention_manager.get_retention_date()
+            expired_analytics = db.query(SearchAnalytics).filter(
+                SearchAnalytics.created_at < cutoff_date
+            ).delete()
+            cleanup_stats["search_analytics"] = expired_analytics
+            
+            # Clean up expired search clicks (older than 1 year)
+            clicks_cutoff = datetime.now() - timedelta(days=365)
+            expired_clicks = db.query(SearchClick).filter(
+                SearchClick.created_at < clicks_cutoff
+            ).delete()
+            cleanup_stats["search_clicks"] = expired_clicks
+            
+            # Clean up expired search performance data (older than 2 years)
+            performance_cutoff = datetime.now() - timedelta(days=730)
+            expired_performance = db.query(SearchPerformance).filter(
+                SearchPerformance.created_at < performance_cutoff
+            ).delete()
+            cleanup_stats["search_performance"] = expired_performance
+            
+            db.commit()
+            
+            logger.info(f"Data cleanup completed: {cleanup_stats}")
+            return cleanup_stats
+            
+        except Exception as e:
+            logger.error(f"Error during data cleanup: {e}")
+            db.rollback()
+            return {}
+    
+    def cleanup_expired_sessions(self, db: Session) -> int:
+        """
+        Clean up expired session data.
+        
+        Args:
+            db: Database session
+            
+        Returns:
+            Number of expired sessions cleaned up
+        """
+        try:
+            # Get all session IDs
+            sessions = db.query(SearchAnalytics.session_id).distinct().all()
+            expired_count = 0
+            
+            for (session_id,) in sessions:
+                if is_session_expired(session_id, PRIVACY_CONFIG["session_expiry_hours"]):
+                    # Delete all analytics for this session
+                    deleted = db.query(SearchAnalytics).filter(
+                        SearchAnalytics.session_id == session_id
+                    ).delete()
+                    expired_count += deleted
+            
+            db.commit()
+            logger.info(f"Cleaned up {expired_count} expired session records")
+            return expired_count
+            
+        except Exception as e:
+            logger.error(f"Error cleaning up expired sessions: {e}")
+            db.rollback()
+            return 0
         """Get popular searches analytics."""
         try:
             popular_searches = db.query(PopularSearch).filter(

@@ -81,7 +81,7 @@ class TestAPIEndpoints:
     def test_autocomplete_endpoint_success(self, client, db_session):
         """Test autocomplete endpoint."""
         # Add test suggestions
-        from ai_shopify_search.models import QuerySuggestion
+        from models import QuerySuggestion
         
         suggestion = QuerySuggestion(
             query="blue",

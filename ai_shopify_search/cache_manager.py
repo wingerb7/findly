@@ -3,7 +3,7 @@ import json
 import hashlib
 import redis
 from typing import Optional, Dict, Any
-from ai_shopify_search.config import REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_PASSWORD, CACHE_TTL, SEARCH_CACHE_TTL, AI_SEARCH_CACHE_TTL
+from config import REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_PASSWORD, CACHE_TTL, SEARCH_CACHE_TTL, AI_SEARCH_CACHE_TTL
 
 logger = logging.getLogger(__name__)
 

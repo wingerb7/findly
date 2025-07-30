@@ -1,9 +1,10 @@
 import logging
 from fastapi import FastAPI, Request
 from sqlalchemy import text
-from ai_shopify_search import products_v2
-from ai_shopify_search.database import Base, engine
-from ai_shopify_search.error_handlers import error_handler_middleware
+import products_v2
+from database import Base, engine
+from config import DATABASE_URL
+from error_handlers import error_handler_middleware
 
 # Configure logging
 logging.basicConfig(
@@ -15,20 +16,21 @@ logger = logging.getLogger(__name__)
 # Create tables if they don't exist
 Base.metadata.create_all(bind=engine)
 
-# Create pgvector extension & index
-with engine.connect() as conn:
-    # Ensure vector extension exists
-    conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
-    
-    # Create index for fast cosine similarity
-    conn.execute(text("""
-        CREATE INDEX IF NOT EXISTS idx_products_embedding
-        ON products
-        USING ivfflat (embedding vector_l2_ops)
-        WITH (lists = 100);
-    """))
-    conn.commit()
+# Create pgvector extension & index (only for PostgreSQL)
+if DATABASE_URL.startswith("postgresql"):
+    with engine.connect() as conn:
+        # Ensure vector extension exists
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+        # Create index for fast cosine similarity
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_products_embedding
+            ON products
+            USING ivfflat (embedding vector_l2_ops)
+            WITH (lists = 100);
+        """))
+        conn.commit()
 
+# FastAPI app
 app = FastAPI(
     title="Findly - AI-Powered Shopify Search",
     description="Advanced AI-powered search platform for Shopify stores",
@@ -42,6 +44,7 @@ app = FastAPI(
 async def error_handling_middleware(request: Request, call_next):
     return await error_handler_middleware(request, call_next)
 
+# Routers
 app.include_router(products_v2.router, prefix="/api", tags=["products"])
 
 @app.get("/")

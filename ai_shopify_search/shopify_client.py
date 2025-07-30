@@ -1,6 +1,6 @@
 import random
 from faker import Faker
-from ai_shopify_search.config import SHOPIFY_STORE_URL, SHOPIFY_API_KEY, SHOPIFY_API_SECRET
+from config import SHOPIFY_STORE_URL, SHOPIFY_API_KEY, SHOPIFY_API_SECRET
 
 fake = Faker('nl_NL')
 

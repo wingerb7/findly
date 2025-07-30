@@ -4,7 +4,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Database configuratie
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost/findly")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./findly.db")
+DATABASE_POOL_SIZE = int(os.getenv("DATABASE_POOL_SIZE", 10))
+DATABASE_MAX_OVERFLOW = int(os.getenv("DATABASE_MAX_OVERFLOW", 20))
 
 # Redis configuratie
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")

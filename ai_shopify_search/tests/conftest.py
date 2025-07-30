@@ -7,11 +7,11 @@ from sqlalchemy.pool import StaticPool
 from unittest.mock import Mock, patch
 import redis
 
-from ai_shopify_search.main import app
-from ai_shopify_search.database import Base, get_db
-from ai_shopify_search.models import Product, SearchAnalytics, PopularSearch
-from ai_shopify_search.cache_manager import cache_manager
-from ai_shopify_search.analytics_manager import analytics_manager
+from main import app
+from database import Base, get_db
+from models import Product, SearchAnalytics, PopularSearch
+from cache_manager import cache_manager
+from analytics_manager import analytics_manager
 
 # Test database configuration
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"

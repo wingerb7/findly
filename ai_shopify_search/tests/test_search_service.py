@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from ai_shopify_search.search_service import SearchService
-from ai_shopify_search.models import Product, QuerySuggestion, PopularSearch
+from search_service import SearchService
+from models import Product, QuerySuggestion, PopularSearch
 
 class TestSearchService:
     """Test cases for SearchService."""

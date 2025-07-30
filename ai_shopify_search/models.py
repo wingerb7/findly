@@ -2,8 +2,18 @@ from sqlalchemy import Column, Integer, String, Float, ForeignKey, TIMESTAMP, Bo
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from pgvector.sqlalchemy import Vector
-from ai_shopify_search.database import Base
+from database import Base
+from config import DATABASE_URL
+
+# Conditional imports for PostgreSQL vs SQLite
+if DATABASE_URL.startswith("postgresql"):
+    from pgvector.sqlalchemy import Vector
+    VectorType = Vector(1536)
+    ArrayType = ARRAY(String)
+else:
+    # SQLite fallbacks
+    VectorType = Text  # Store as JSON string
+    ArrayType = Text   # Store as JSON string
 
 class Store(Base):
     __tablename__ = "stores"
@@ -21,8 +31,8 @@ class Product(Base):
     title = Column(String)
     description = Column(String)
     price = Column(Float)
-    tags = Column(ARRAY(String))
-    embedding = Column(Vector(1536))
+    tags = Column(ArrayType)
+    embedding = Column(VectorType)
     store = relationship("Store", back_populates="products")
 
 class SearchAnalytics(Base):

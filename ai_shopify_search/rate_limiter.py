@@ -1,7 +1,7 @@
 import time
 import logging
 from typing import Dict, Tuple, Optional
-from ai_shopify_search.cache_manager import cache_manager
+from cache_manager import cache_manager
 
 logger = logging.getLogger(__name__)
 
