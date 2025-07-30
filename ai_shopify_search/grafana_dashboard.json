@@ -1,0 +1,102 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "AI Shopify Search - Performance Dashboard",
+    "tags": ["ai-search", "shopify", "performance"],
+    "style": "dark",
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Search Requests per Second",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(search_requests_total[5m])",
+            "legendFormat": "{{search_type}} - {{cache_hit}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Search Response Time",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(search_response_time_seconds_bucket[5m]))",
+            "legendFormat": "95th percentile - {{search_type}}"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(search_response_time_seconds_bucket[5m]))",
+            "legendFormat": "50th percentile - {{search_type}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Cache Hit Ratio",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "cache_hit_ratio",
+            "legendFormat": "{{search_type}}"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Active Database Connections",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "active_connections"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "Redis Connections",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "redis_connections"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 8}
+      },
+      {
+        "id": 6,
+        "title": "Search Results Distribution",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(search_results_count_sum[5m]) / rate(search_results_count_count[5m])",
+            "legendFormat": "Avg results - {{search_type}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12}
+      },
+      {
+        "id": 7,
+        "title": "Rate Limit Violations",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{status=~\"429\"}[5m])",
+            "legendFormat": "Rate limit exceeded"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s"
+  }
+} 
