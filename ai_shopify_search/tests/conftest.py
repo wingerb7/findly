@@ -13,7 +13,13 @@ from core.models import Product, SearchAnalytics, PopularSearch
 from cache_manager import cache_manager
 from analytics_manager import analytics_manager
 
-# Test database configuration
+# Test database configuration - Force SQLite for testing
+import os
+os.environ['DATABASE_URL'] = "sqlite:///./test.db"
+
+# Force reload of models to pick up the new DATABASE_URL
+# Note: This can cause issues with SQLAlchemy table definitions
+# We'll handle this differently by setting the environment variable before imports
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
 
 engine = create_engine(

@@ -6,7 +6,7 @@ Input validation and security utilities for the search API.
 import re
 import hashlib
 from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, validator, Field
+from pydantic import BaseModel, field_validator, Field
 from fastapi import HTTPException, status
 import logging
 
@@ -19,7 +19,8 @@ class SearchQuery(BaseModel):
     page: int = Field(1, ge=1, le=1000, description="Page number")
     limit: int = Field(25, ge=1, le=100, description="Results per page")
     
-    @validator('query')
+    @field_validator('query')
+    @classmethod
     def validate_query(cls, v):
         """Validate and sanitize search query."""
         if not v or not v.strip():
@@ -36,7 +37,8 @@ class SearchQuery(BaseModel):
         
         return sanitized
     
-    @validator('page')
+    @field_validator('page')
+    @classmethod
     def validate_page(cls, v):
         """Validate page number."""
         if v < 1:
@@ -45,7 +47,8 @@ class SearchQuery(BaseModel):
             raise ValueError('Page number too high (max 1000)')
         return v
     
-    @validator('limit')
+    @field_validator('limit')
+    @classmethod
     def validate_limit(cls, v):
         """Validate limit parameter."""
         if v < 1:
@@ -60,7 +63,8 @@ class AISearchQuery(SearchQuery):
     source_language: Optional[str] = Field(None, max_length=10, description="Source language (ISO 639-1)")
     target_language: str = Field("en", max_length=10, description="Target language (ISO 639-1)")
     
-    @validator('source_language')
+    @field_validator('source_language')
+    @classmethod
     def validate_source_language(cls, v):
         """Validate source language code."""
         if v is not None:
@@ -68,7 +72,8 @@ class AISearchQuery(SearchQuery):
                 raise ValueError('Invalid source language format (use ISO 639-1)')
         return v
     
-    @validator('target_language')
+    @field_validator('target_language')
+    @classmethod
     def validate_target_language(cls, v):
         """Validate target language code."""
         if not re.match(r'^[a-z]{2}(-[A-Z]{2})?$', v):
@@ -82,7 +87,8 @@ class AnalyticsQuery(BaseModel):
     end_date: str = Field(..., description="End date (YYYY-MM-DD)")
     search_type: Optional[str] = Field(None, description="Search type filter")
     
-    @validator('start_date', 'end_date')
+    @field_validator('start_date', 'end_date')
+    @classmethod
     def validate_date_format(cls, v):
         """Validate date format."""
         if not re.match(r'^\d{4}-\d{2}-\d{2}$', v):
@@ -97,7 +103,8 @@ class AnalyticsQuery(BaseModel):
         
         return v
     
-    @validator('search_type')
+    @field_validator('search_type')
+    @classmethod
     def validate_search_type(cls, v):
         """Validate search type."""
         if v is not None and v not in ['basic', 'ai', 'faceted']:

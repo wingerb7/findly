@@ -1,12 +1,20 @@
+import os
 from sqlalchemy import Column, Integer, String, Float, ForeignKey, TIMESTAMP, Boolean, JSON, Text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from .database import Base
-from config import DATABASE_URL
+
+# Get DATABASE_URL from environment or config
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if not DATABASE_URL:
+    try:
+        from config import DATABASE_URL
+    except ImportError:
+        DATABASE_URL = 'sqlite:///./test.db'
 
 # Conditional imports for PostgreSQL vs SQLite
-if DATABASE_URL.startswith("postgresql"):
+if DATABASE_URL and DATABASE_URL.startswith("postgresql"):
     from pgvector.sqlalchemy import Vector
     VectorType = Vector(1536)
     ArrayType = ARRAY(String)
@@ -23,6 +31,8 @@ class Store(Base):
     installed_at = Column(TIMESTAMP, server_default=func.now())
     products = relationship("Product", back_populates="store")
 
+import json
+
 class Product(Base):
     __tablename__ = "products"
     id = Column(Integer, primary_key=True, index=True)
@@ -34,6 +44,16 @@ class Product(Base):
     tags = Column(ArrayType)
     embedding = Column(VectorType)
     store = relationship("Store", back_populates="products")
+    
+    def __init__(self, **kwargs):
+        # Serialize lists for SQLite
+        if 'tags' in kwargs and isinstance(kwargs['tags'], list):
+            if DATABASE_URL and DATABASE_URL.startswith("sqlite"):
+                kwargs['tags'] = json.dumps(kwargs['tags'])
+        if 'embedding' in kwargs and isinstance(kwargs['embedding'], list):
+            if DATABASE_URL and DATABASE_URL.startswith("sqlite"):
+                kwargs['embedding'] = json.dumps(kwargs['embedding'])
+        super().__init__(**kwargs)
 
 class SearchAnalytics(Base):
     __tablename__ = "search_analytics"
