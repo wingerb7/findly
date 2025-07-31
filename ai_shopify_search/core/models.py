@@ -16,7 +16,7 @@ if not DATABASE_URL:
 # Conditional imports for PostgreSQL vs SQLite
 if DATABASE_URL and DATABASE_URL.startswith("postgresql"):
     from pgvector.sqlalchemy import Vector
-    VectorType = Vector(1536)
+    VectorType = Vector(1536)  # 1536d voor text-embedding-3-small
     ArrayType = ARRAY(String)
 else:
     # SQLite fallbacks

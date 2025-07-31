@@ -20,6 +20,8 @@ from utils.validation import (
     log_security_event
 )
 from utils.privacy_utils import sanitize_log_data
+from services.smart_autocomplete import SmartAutocompleteService
+from services.facets_service import FacetsService
 from error_handlers import (
     validate_search_parameters, 
     validate_analytics_parameters,
@@ -39,6 +41,10 @@ router = APIRouter()
 # Rate limiting configuration
 AI_SEARCH_RATE_LIMIT = 100  # requests per hour
 AI_SEARCH_RATE_WINDOW = 3600  # seconds
+
+# Initialize services
+smart_autocomplete = SmartAutocompleteService(cache_manager)
+facets_service = FacetsService(cache_manager)
 
 @router.post("/import-products")
 async def import_products(db: Session = Depends(get_db)):
@@ -163,8 +169,8 @@ async def ai_search_products(
             target_language=target_language
         )
         
-        # Validate price range (will be extracted from query)
-        min_price, max_price = extract_price_intent(search_query.query)
+        # Extract price intent with enhanced functionality
+        min_price, max_price, price_metadata = extract_price_intent(search_query.query)
         validate_price_range(min_price, max_price)
         
         # Sanitize and validate rate limit identifier
@@ -204,15 +210,16 @@ async def ai_search_products(
         for key, value in rate_limiter.get_rate_limit_headers(rate_limit_info).items():
             response.headers[key] = value
         
-        # Extract price intent from query
-        min_price, max_price = extract_price_intent(search_query.query)
+        # Extract price intent from query (already done above)
         cleaned_query = clean_query_from_price_intent(search_query.query)
         
-        # Log price intent information with sanitized data
+        # Log price intent information with enhanced metadata
         if min_price is not None or max_price is not None:
             sanitized_original = sanitize_log_data(search_query.query, 50)
             sanitized_cleaned = sanitize_log_data(cleaned_query, 50)
-            logger.info(f"💰 Prijsfilter toegepast op AI search: min_price={min_price}, max_price={max_price}")
+            confidence = price_metadata.get("confidence", 0.0)
+            pattern_type = price_metadata.get("pattern_type", "unknown")
+            logger.info(f"💰 Prijsfilter toegepast op AI search: min_price={min_price}, max_price={max_price}, confidence={confidence:.2f}, pattern={pattern_type}")
             logger.info(f"🧹 Opgeschoonde query: '{sanitized_cleaned}' (origineel: '{sanitized_original}')")
         
         # Perform AI search with price filtering
@@ -242,18 +249,26 @@ async def ai_search_products(
         try:
             analytics_manager.track_search(
                 query=query,
-                search_type="ai",
-                filters={},
-                results_count=result.get("count", 0),
-                page=page,
-                limit=limit,
-                response_time=response_time,
-                cache_hit=result.get("cache_hit", False),
+                result_count=result.get("count", 0),
+                total_count=result.get("pagination", {}).get("total_count", 0),
+                search_time=response_time,
                 user_agent=user_agent,
-                client_ip=client_ip
+                ip_address=client_ip,
+                fallback_used=result.get("price_filter", {}).get("fallback_used", False),
+                db=db
             )
         except Exception as e:
             logger.warning(f"Failed to log analytics: {e}")
+        
+        # Generate dynamic facets from results
+        try:
+            if result.get("results"):
+                facets = await facets_service.generate_facets_from_results(
+                    db, result["results"], query
+                )
+                result["facets"] = facets
+        except Exception as e:
+            logger.warning(f"Failed to generate facets: {e}")
         
         return result
         
@@ -350,115 +365,42 @@ async def get_products_paginated(
 async def get_autocomplete_suggestions_endpoint(
     query: str = Query(..., description="Query for autocomplete"),
     limit: int = Query(10, ge=1, le=50, description="Number of suggestions"),
-    include_popular: bool = Query(True, description="Include popular suggestions"),
-    include_related: bool = Query(True, description="Include related suggestions"),
+    context: Optional[str] = Query(None, description="Search context (e.g., 'price_filter', 'category')"),
     db: Session = Depends(get_db)
 ):
-    """Get autocomplete suggestions for a query with price intent filtering."""
+    """Get smart autocomplete suggestions with fuzzy search and context awareness."""
     try:
-        # Log de originele query
-        original_query = query
-        
-        # Check of query leeg is en gebruik fallback
+        # Validate input
         if not query or not query.strip():
-            logger.warning("🔍 Autocomplete aangeroepen met lege query, gebruik fallback")
-            query = "popular"  # Fallback waarde
-            logger.info(f"🔄 Query overschreven door fallback: '{query}'")
+            return {"suggestions": [], "query": "", "context": context}
         
-        # Extract price intent from query
-        min_price, max_price = extract_price_intent(query)
-        cleaned_query = clean_query_from_price_intent(query)
+        logger.info(f"🔍 Getting smart autocomplete suggestions for: '{query}' (context: {context})")
         
-        # Log price intent information
-        if min_price is not None or max_price is not None:
-            logger.info(f"💰 Prijsfilter toegepast: min_price={min_price}, max_price={max_price}")
-            logger.info(f"🧹 Opgeschoonde query: '{cleaned_query}'")
-        
-        # Check cache first (include price filters in cache key)
-        cache_key = cache_manager.get_cache_key(
-            "autocomplete", 
-            query=cleaned_query, 
-            limit=limit, 
-            include_popular=include_popular, 
-            include_related=include_related,
-            min_price=min_price,
-            max_price=max_price
+        # Get smart suggestions
+        suggestions = smart_autocomplete.get_smart_suggestions(
+            db, query, limit, context
         )
-        cached_result = cache_manager.get_cached_result(cache_key)
-        if cached_result:
-            logger.info(f"✅ Cache hit for autocomplete: '{cleaned_query}' (met prijsfilter)")
-            return cached_result
-            
-        logger.info(f"🔍 Getting autocomplete suggestions for: '{cleaned_query}' (met prijsfilter)")
         
-        suggestions = []
-        
-        # Get autocomplete suggestions with price filtering
-        autocomplete_suggestions = search_service.get_autocomplete_suggestions_with_price_filter(
-            db, cleaned_query, limit, min_price, max_price
+        # Get related suggestions
+        related_suggestions = smart_autocomplete.get_related_suggestions(
+            db, query, min(5, limit // 2)
         )
-        suggestions.extend(autocomplete_suggestions)
-        
-        # Add popular suggestions (also filtered by price)
-        if include_popular and len(suggestions) < limit:
-            popular_suggestions = search_service.get_popular_suggestions_with_price_filter(
-                db, limit - len(suggestions), min_price, max_price
-            )
-            suggestions.extend(popular_suggestions)
-        
-        # Add related suggestions (also filtered by price)
-        if include_related and len(suggestions) < limit:
-            related_suggestions = search_service.get_related_suggestions_with_price_filter(
-                db, cleaned_query, limit - len(suggestions), min_price, max_price
-            )
-            suggestions.extend(related_suggestions)
-        
-        # Generate suggestions from product data as fallback (with price filtering)
-        if len(suggestions) < limit:
-            product_suggestions = search_service.generate_suggestions_from_products_with_price_filter(
-                db, cleaned_query, limit - len(suggestions), min_price, max_price
-            )
-            for suggestion in product_suggestions:
-                suggestions.append({
-                    "suggestion": suggestion,
-                    "type": "product",
-                    "search_count": 0,
-                    "click_count": 0,
-                    "relevance_score": 0.5,
-                    "similarity_score": 0.8
-                })
-        
-        # If no suggestions found with price filter, get cheapest alternatives
-        if len(suggestions) == 0 and (min_price is not None or max_price is not None):
-            logger.warning(f"⚠️ Geen producten gevonden binnen prijsrange, toon goedkoopste alternatieven")
-            cheapest_suggestions = search_service.get_cheapest_product_suggestions(db, limit)
-            suggestions.extend(cheapest_suggestions)
         
         result = {
-            "query": cleaned_query,
-            "original_query": original_query,
-            "suggestions": suggestions[:limit],
-            "count": len(suggestions[:limit]),
-            "fallback_used": original_query != query,
-            "price_filter": {
-                "min_price": min_price,
-                "max_price": max_price,
-                "applied": min_price is not None or max_price is not None,
-                "message": format_price_message(min_price, max_price)
-            },
-            "no_products_in_range": len(suggestions) == 0 and (min_price is not None or max_price is not None),
-            "alternative_message": "Geen producten gevonden binnen de prijsklasse, hier zijn de goedkoopste alternatieven." if len(suggestions) == 0 and (min_price is not None or max_price is not None) else None
+            "query": query,
+            "suggestions": suggestions,
+            "related_suggestions": related_suggestions,
+            "context": context,
+            "total_suggestions": len(suggestions),
+            "total_related": len(related_suggestions)
         }
         
-        # Cache the result
-        cache_manager.set_cached_result(cache_key, result)
-        
-        logger.info(f"✅ Autocomplete suggestions succesvol gegenereerd: {len(suggestions[:limit])} suggesties voor '{cleaned_query}' (met prijsfilter)")
+        logger.info(f"✅ Smart autocomplete suggestions generated: {len(suggestions)} suggestions for '{query}'")
         
         return result
         
     except Exception as e:
-        logger.error(f"Error in autocomplete suggestions: {e}")
+        logger.error(f"Error in smart autocomplete suggestions: {e}")
         raise HTTPException(status_code=500, detail="Failed to get autocomplete suggestions")
 
 @router.post("/track-click")

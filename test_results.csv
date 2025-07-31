@@ -1,0 +1,6 @@
+query,score,avg_price_top5,titles_top5,response_time,result_count,price_filter_applied,fallback_used,gpt_reasoning
+goedkope schoenen,0.000,0.00,,0.008,0,False,False,"Search failed: Cannot connect to host localhost:8000 ssl:default [Multiple exceptions: [Errno 61] Connect call failed ('::1', 8000, 0, 0), [Errno 61] Connect call failed ('127.0.0.1', 8000)]"
+duur exclusief jas,0.000,0.00,,0.042,0,False,False,"Search failed: Cannot connect to host localhost:8000 ssl:default [Multiple exceptions: [Errno 61] Connect call failed ('127.0.0.1', 8000), [Errno 61] Connect call failed ('::1', 8000, 0, 0)]"
+zwarte leder schoenen voor heren,0.000,0.00,,0.002,0,False,False,"Search failed: Cannot connect to host localhost:8000 ssl:default [Multiple exceptions: [Errno 61] Connect call failed ('::1', 8000, 0, 0), [Errno 61] Connect call failed ('127.0.0.1', 8000)]"
+betaalbare shirt voor een tiener,0.000,0.00,,0.001,0,False,False,"Search failed: Cannot connect to host localhost:8000 ssl:default [Multiple exceptions: [Errno 61] Connect call failed ('127.0.0.1', 8000), [Errno 61] Connect call failed ('::1', 8000, 0, 0)]"
+winter jas goedkoop,0.000,0.00,,0.001,0,False,False,"Search failed: Cannot connect to host localhost:8000 ssl:default [Multiple exceptions: [Errno 61] Connect call failed ('::1', 8000, 0, 0), [Errno 61] Connect call failed ('127.0.0.1', 8000)]"

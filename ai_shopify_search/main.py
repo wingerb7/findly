@@ -1,7 +1,16 @@
 import logging
 from fastapi import FastAPI, Request
 from sqlalchemy import text
-from api import products_v2
+try:
+    from api.products_v2 import router as products_v2
+    from api.feedback_routes import router as feedback_routes
+except ImportError:
+    # Fallback for direct execution
+    import sys
+    import os
+    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+    from api.products_v2 import router as products_v2
+    from api.feedback_routes import router as feedback_routes
 from core.database import Base, engine
 from config import DATABASE_URL
 from error_handlers import error_handler_middleware
@@ -18,17 +27,23 @@ Base.metadata.create_all(bind=engine)
 
 # Create pgvector extension & index (only for PostgreSQL)
 if DATABASE_URL.startswith("postgresql"):
-    with engine.connect() as conn:
-        # Ensure vector extension exists
-        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
-        # Create index for fast cosine similarity
-        conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_products_embedding
-            ON products
-            USING ivfflat (embedding vector_l2_ops)
-            WITH (lists = 100);
-        """))
-        conn.commit()
+    try:
+        with engine.connect() as conn:
+            # Ensure vector extension exists
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+            
+            # Create index for fast cosine similarity (will be recreated if needed)
+            conn.execute(text("DROP INDEX IF EXISTS idx_products_embedding;"))
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_products_embedding
+                ON products
+                USING ivfflat (embedding vector_l2_ops)
+                WITH (lists = 100);
+            """))
+            conn.commit()
+            logger.info("Database setup completed successfully")
+    except Exception as e:
+        logger.warning(f"Database setup warning (this is normal for new installations): {e}")
 
 # FastAPI app
 app = FastAPI(
@@ -45,7 +60,8 @@ async def error_handling_middleware(request: Request, call_next):
     return await error_handler_middleware(request, call_next)
 
 # Routers
-app.include_router(products_v2.router, prefix="/api", tags=["products"])
+app.include_router(products_v2, prefix="/api", tags=["products"])
+app.include_router(feedback_routes, tags=["feedback"])
 
 @app.get("/")
 async def root():

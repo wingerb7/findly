@@ -106,6 +106,72 @@ class AnalyticsManager:
             db.rollback()
             return None
     
+    def track_search(
+        self,
+        query: str,
+        result_count: int,
+        total_count: int,
+        search_time: float,
+        user_agent: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        fallback_used: bool = False,
+        db: Optional[Session] = None
+    ) -> None:
+        """
+        Track search analytics with simplified interface for API compatibility.
+        This method provides a simplified interface that calls track_search_analytics internally.
+        
+        Args:
+            query: Search query
+            result_count: Number of results returned
+            total_count: Total number of results available
+            search_time: Search time in seconds
+            user_agent: User agent string (optional)
+            ip_address: IP address (optional)
+            fallback_used: Whether fallback search was used
+            db: Database session (optional, for backward compatibility)
+        """
+        try:
+            # Convert search_time from seconds to milliseconds
+            response_time_ms = search_time * 1000
+            
+            # Create filters dict with fallback information
+            filters = {
+                "fallback_used": fallback_used,
+                "total_count": total_count
+            }
+            
+            # Call the existing track_search_analytics method
+            if db:
+                self.track_search_analytics(
+                    db=db,
+                    query=query,
+                    search_type="ai",
+                    filters=filters,
+                    results_count=result_count,
+                    page=1,  # Default to page 1
+                    limit=result_count,  # Use result_count as limit
+                    response_time_ms=response_time_ms,
+                    cache_hit=False,  # Default to False
+                    user_agent=user_agent,
+                    ip_address=ip_address
+                )
+            else:
+                # Log-only mode when no database is available
+                sanitized_query = sanitize_log_data(query, max_length=50)
+                sanitized_ua = sanitize_user_agent(user_agent) if user_agent else None
+                anonymized_ip = anonymize_ip(ip_address) if ip_address else None
+                
+                logger.info(
+                    f"Search tracked (log-only): {sanitized_query} - "
+                    f"{result_count}/{total_count} results, {search_time:.3f}s, "
+                    f"fallback={fallback_used}, ip={anonymized_ip}, ua={sanitized_ua}"
+                )
+                
+        except Exception as e:
+            logger.warning(f"Failed to track search analytics: {e}")
+            # Don't raise exception to prevent API failures
+    
     def track_product_click(
         self,
         db: Session,
