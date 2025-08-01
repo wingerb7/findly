@@ -9,7 +9,7 @@ import hashlib
 from typing import Any, Optional, Dict
 from datetime import timedelta
 import redis
-from config import REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_PASSWORD
+from core.config import REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_PASSWORD
 
 logger = logging.getLogger(__name__)
 

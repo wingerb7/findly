@@ -10,8 +10,8 @@ import redis
 from main import app
 from core.database import Base, get_db
 from core.models import Product, SearchAnalytics, PopularSearch
-from cache_manager import cache_manager
-from analytics_manager import analytics_manager
+from core.cache_manager import cache_manager
+from core.analytics_manager import analytics_manager
 
 # Test database configuration - Force SQLite for testing
 import os

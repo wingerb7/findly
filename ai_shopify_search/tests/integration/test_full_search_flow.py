@@ -16,7 +16,7 @@ from main import app
 from core.database import get_db, SessionLocal
 from core.models import Product, SearchAnalytics
 from services.service_factory import service_factory
-from utils.privacy_utils import anonymize_ip
+from utils.privacy import anonymize_ip
 from utils.validation import sanitize_search_query
 
 

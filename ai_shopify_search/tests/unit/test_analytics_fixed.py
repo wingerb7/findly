@@ -6,7 +6,7 @@ Tests the enhanced analytics tracking with null-safe logging.
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from analytics_manager import AnalyticsManager
-from utils.privacy_utils import sanitize_log_data, anonymize_ip, sanitize_user_agent
+from utils.privacy import sanitize_log_data, anonymize_ip, sanitize_user_agent
 
 
 class TestAnalyticsManager:

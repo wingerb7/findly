@@ -10,6 +10,12 @@ from .analytics_service import AnalyticsService
 from .ai_search_service import AISearchService
 from .autocomplete_service import AutocompleteService
 from .suggestion_service import SuggestionService
+from .transfer_learning_service import TransferLearningService
+from .knowledge_base_service import KnowledgeBaseService
+from .baseline_generator_service import BaselineGeneratorService
+from .pattern_learning_service import PatternLearningService
+from .facets_service import FacetsService
+from .smart_autocomplete import SmartAutocompleteService
 
 logger = logging.getLogger(__name__)
 
@@ -37,13 +43,27 @@ class ServiceFactory:
             autocomplete_service = AutocompleteService(cache_service, analytics_service)
             suggestion_service = SuggestionService(cache_service)
             
+            # Initialize AI feature services
+            transfer_learning_service = TransferLearningService()
+            knowledge_base_service = KnowledgeBaseService()
+            baseline_generator_service = BaselineGeneratorService()
+            pattern_learning_service = PatternLearningService()
+            facets_service = FacetsService()
+            smart_autocomplete_service = SmartAutocompleteService()
+            
             # Store services
             self._services = {
                 "cache": cache_service,
                 "analytics": analytics_service,
                 "ai_search": ai_search_service,
                 "autocomplete": autocomplete_service,
-                "suggestion": suggestion_service
+                "suggestion": suggestion_service,
+                "transfer_learning": transfer_learning_service,
+                "knowledge_base": knowledge_base_service,
+                "baseline_generator": baseline_generator_service,
+                "pattern_learning": pattern_learning_service,
+                "facets": facets_service,
+                "smart_autocomplete": smart_autocomplete_service
             }
             
             # Health check
@@ -109,6 +129,30 @@ class ServiceFactory:
     def get_suggestion_service(self) -> SuggestionService:
         """Get suggestion service."""
         return self.get_service("suggestion")
+    
+    def get_transfer_learning_service(self) -> TransferLearningService:
+        """Get transfer learning service."""
+        return self.get_service("transfer_learning")
+    
+    def get_knowledge_base_service(self) -> KnowledgeBaseService:
+        """Get knowledge base service."""
+        return self.get_service("knowledge_base")
+    
+    def get_baseline_generator_service(self) -> BaselineGeneratorService:
+        """Get baseline generator service."""
+        return self.get_service("baseline_generator")
+    
+    def get_pattern_learning_service(self) -> PatternLearningService:
+        """Get pattern learning service."""
+        return self.get_service("pattern_learning")
+    
+    def get_facets_service(self) -> FacetsService:
+        """Get facets service."""
+        return self.get_service("facets")
+    
+    def get_smart_autocomplete_service(self) -> SmartAutocompleteService:
+        """Get smart autocomplete service."""
+        return self.get_service("smart_autocomplete")
     
     async def shutdown(self) -> None:
         """Shutdown all services."""
@@ -193,4 +237,34 @@ async def get_autocomplete_service() -> AutocompleteService:
 async def get_suggestion_service() -> SuggestionService:
     """Get suggestion service."""
     factory = await get_service_factory()
-    return factory.get_suggestion_service() 
+    return factory.get_suggestion_service()
+
+async def get_transfer_learning_service() -> TransferLearningService:
+    """Get transfer learning service."""
+    factory = await get_service_factory()
+    return factory.get_transfer_learning_service()
+
+async def get_knowledge_base_service() -> KnowledgeBaseService:
+    """Get knowledge base service."""
+    factory = await get_service_factory()
+    return factory.get_knowledge_base_service()
+
+async def get_baseline_generator_service() -> BaselineGeneratorService:
+    """Get baseline generator service."""
+    factory = await get_service_factory()
+    return factory.get_baseline_generator_service()
+
+async def get_pattern_learning_service() -> PatternLearningService:
+    """Get pattern learning service."""
+    factory = await get_service_factory()
+    return factory.get_pattern_learning_service()
+
+async def get_facets_service() -> FacetsService:
+    """Get facets service."""
+    factory = await get_service_factory()
+    return factory.get_facets_service()
+
+async def get_smart_autocomplete_service() -> SmartAutocompleteService:
+    """Get smart autocomplete service."""
+    factory = await get_service_factory()
+    return factory.get_smart_autocomplete_service() 

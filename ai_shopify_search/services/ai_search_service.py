@@ -11,10 +11,15 @@ from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from core.models import Product
-from embeddings import generate_embedding, generate_batch_embeddings, calculate_similarity, get_embedding_model
+from core.embeddings import generate_embedding, generate_batch_embeddings, calculate_similarity, get_embedding_model
 from utils.validation import validate_price_range, generate_secure_cache_key
-from utils.privacy_utils import sanitize_log_data
-from utils.fuzzy_search import FuzzySearch
+from utils.privacy import sanitize_log_data
+from utils.search import FuzzySearch
+from features.price_intent import get_price_range, clean_query_from_price_intent
+from features.refinement_agent import ConversationalRefinementAgent
+from features.store_profile import StoreProfileGenerator
+from features.adaptive_filters import AdaptiveFilterEngine
+from features.knowledge_base_builder import KnowledgeBaseBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +32,43 @@ class AISearchService:
         self.max_retries = 3
         self.retry_delay = 1.0
         self.fuzzy_search = FuzzySearch()
+        
+        # Initialize AI features
+        self._initialize_features()
+    
+    def _initialize_features(self):
+        """Initialize all AI features with error handling."""
+        try:
+            # Initialize refinement agent for conversational search
+            self.refinement_agent = ConversationalRefinementAgent()
+            logger.info("ConversationalRefinementAgent initialized")
+        except Exception as e:
+            logger.warning(f"Failed to initialize ConversationalRefinementAgent: {e}")
+            self.refinement_agent = None
+        
+        try:
+            # Initialize store profile generator
+            self.store_profile_generator = StoreProfileGenerator()
+            logger.info("StoreProfileGenerator initialized")
+        except Exception as e:
+            logger.warning(f"Failed to initialize StoreProfileGenerator: {e}")
+            self.store_profile_generator = None
+        
+        try:
+            # Initialize adaptive filters
+            self.adaptive_filters = AdaptiveFilterEngine()
+            logger.info("AdaptiveFilterEngine initialized")
+        except Exception as e:
+            logger.warning(f"Failed to initialize AdaptiveFilterEngine: {e}")
+            self.adaptive_filters = None
+        
+        try:
+            # Initialize knowledge base builder
+            self.knowledge_builder = KnowledgeBaseBuilder()
+            logger.info("KnowledgeBaseBuilder initialized")
+        except Exception as e:
+            logger.warning(f"Failed to initialize KnowledgeBaseBuilder: {e}")
+            self.knowledge_builder = None
     
     def log_search_event(
         self,
@@ -126,8 +168,45 @@ class AISearchService:
             if not query or not query.strip():
                 return self._create_empty_response(query, page, limit)
             
-            # Apply fuzzy search corrections
-            corrected_query, suggestions = self.fuzzy_search.correct_query(query)
+            # Detect price intent from query
+            detected_min_price, detected_max_price, confidence, detection_method = get_price_range(query)
+            
+            # Use detected prices if no explicit prices provided
+            if min_price is None and detected_min_price is not None:
+                min_price = detected_min_price
+            if max_price is None and detected_max_price is not None:
+                max_price = detected_max_price
+            
+            # Clean query from price intent for better search results
+            cleaned_query = clean_query_from_price_intent(query)
+            
+            # Apply adaptive filters if available
+            if self.adaptive_filters:
+                try:
+                    filter_context = {
+                        "query": cleaned_query,
+                        "price_range": {"min": min_price, "max": max_price},
+                        "user_agent": user_agent,
+                        "ip_address": ip_address
+                    }
+                    adaptive_filters = self.adaptive_filters.get_adaptive_filters(filter_context)
+                    # Apply adaptive filters to search parameters
+                    if adaptive_filters:
+                        logger.info(f"Applied adaptive filters: {adaptive_filters}")
+                except Exception as e:
+                    logger.warning(f"Adaptive filters failed: {e}")
+            
+            # Generate store profile insights if available
+            store_insights = None
+            if self.store_profile_generator:
+                try:
+                    store_insights = self.store_profile_generator.generate_insights(cleaned_query)
+                    logger.info(f"Generated store insights: {store_insights}")
+                except Exception as e:
+                    logger.warning(f"Store profile generation failed: {e}")
+            
+            # Apply fuzzy search corrections to cleaned query
+            corrected_query, suggestions = self.fuzzy_search.correct_query(cleaned_query)
             original_query = query
             query = corrected_query
             
@@ -217,6 +296,26 @@ class AISearchService:
                     "correction_applied": True
                 }
             
+            # Add conversational refinements if available
+            if self.refinement_agent and len(results) > 0:
+                try:
+                    refinement_context = {
+                        "query": cleaned_query,
+                        "results": results[:10],  # Top 10 results for context
+                        "price_range": {"min": min_price, "max": max_price},
+                        "total_count": total_count
+                    }
+                    refinements = self.refinement_agent.generate_refinements(refinement_context)
+                    if refinements:
+                        response["conversational_refinements"] = refinements
+                        logger.info(f"Generated {len(refinements)} conversational refinements")
+                except Exception as e:
+                    logger.warning(f"Conversational refinements failed: {e}")
+            
+            # Add store insights if available
+            if store_insights:
+                response["store_insights"] = store_insights
+            
             # Cache results
             await self.cache_service.set(cache_key, response, ttl=3600)  # 1 hour
             
@@ -232,7 +331,7 @@ class AISearchService:
                 query=query,
                 user_ip=ip_address,
                 user_agent=user_agent,
-                price_intent={"max_price": max_price, "pattern_type": "budget" if max_price == 75 else None, "confidence": 0.85 if max_price == 75 else 0.0} if max_price is not None else None,
+                price_intent={"min_price": detected_min_price, "max_price": detected_max_price, "pattern_type": detection_method, "confidence": confidence} if detected_min_price is not None or detected_max_price is not None else None,
                 min_price=min_price,
                 max_price=max_price,
                 fallback_used=fallback_used,

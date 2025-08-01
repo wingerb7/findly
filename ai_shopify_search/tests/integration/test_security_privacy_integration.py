@@ -16,7 +16,7 @@ from main import app
 from core.database import SessionLocal
 from core.models import Product, SearchAnalytics, SearchClick
 from services.service_factory import service_factory
-from utils.privacy_utils import anonymize_ip, sanitize_user_agent, generate_session_id
+from utils.privacy import anonymize_ip, sanitize_user_agent, generate_session_id
 from utils.validation import sanitize_search_query, validate_price_range
 from utils.error_handling import handle_errors
 
@@ -103,7 +103,7 @@ class TestSecurityPrivacyIntegration:
     
     def test_data_retention_compliance(self, client, db_session, sample_products):
         """Test data retention compliance."""
-        from utils.privacy_utils import DataRetentionManager
+        from utils.privacy import DataRetentionManager
         
         retention_manager = DataRetentionManager()
         

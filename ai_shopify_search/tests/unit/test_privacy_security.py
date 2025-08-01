@@ -12,7 +12,7 @@ from typing import Dict, Any
 # Add the current directory to the path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from utils.privacy_utils import (
+from utils.privacy import (
     anonymize_ip, sanitize_user_agent, generate_session_id, 
     is_session_expired, sanitize_log_data
 )

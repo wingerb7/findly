@@ -5,11 +5,11 @@ Tests core functionality without complex dependencies.
 import pytest
 import json
 from unittest.mock import Mock, patch
-from utils.privacy_utils import anonymize_ip, sanitize_user_agent, sanitize_log_data
+from utils.privacy import anonymize_ip, sanitize_user_agent, sanitize_log_data
 from utils.validation import sanitize_search_query, validate_price_range
 from utils.error_handling import BaseError, ValidationError, DatabaseError
 from core.models import Product, SearchAnalytics
-from config import DATABASE_URL
+from core.config import DATABASE_URL
 
 
 def test_privacy_utils_basic():
@@ -133,7 +133,7 @@ def test_utils_imports():
     print("=" * 30)
     
     # Test privacy utils imports
-    from utils.privacy_utils import (
+    from utils.privacy import (
         anonymize_ip, sanitize_user_agent, sanitize_log_data,
         generate_session_id, is_session_expired
     )
@@ -161,7 +161,7 @@ def test_core_imports():
     # Test core imports
     from core.models import Product, SearchAnalytics, PopularSearch
     from core.database import Base, engine, SessionLocal
-    from core.database_async import AsyncDatabaseService
+    # from core.database_async import AsyncDatabaseService  # Removed - file doesn't exist
     
     print("✅ All core imports successful")
 

@@ -18,7 +18,7 @@ from services.cache_service import CacheService
 from services.analytics_service import AnalyticsService
 from services.suggestion_service import SuggestionService
 from services.autocomplete_service import AutocompleteService
-from utils.privacy_utils import anonymize_ip
+from utils.privacy import anonymize_ip
 from utils.validation import sanitize_search_query
 
 
