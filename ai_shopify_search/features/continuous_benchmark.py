@@ -13,7 +13,7 @@ import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 import argparse
 import sqlite3
 import statistics
@@ -35,14 +35,52 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Constants
+DEFAULT_BASE_URL = "http://localhost:8000"
+DEFAULT_DB_PATH = "search_knowledge_base.db"
+DEFAULT_REGRESSION_THRESHOLD = 0.1  # 10% threshold
+DEFAULT_QUERIES_FILE = "benchmark_queries.csv"
+DEFAULT_DAYS_HISTORY = 7
+DEFAULT_HISTORY_LIMIT = 5
+
+# Performance thresholds
+PERFORMANCE_THRESHOLDS = {
+    "score_improvement": 0.05,
+    "response_time_improvement": 0.1,
+    "regression_severity": {
+        "low": 0.1,
+        "medium": 0.2,
+        "high": 0.3
+    }
+}
+
+# Error Messages
+ERROR_NO_RESULTS = "No benchmark results found"
+ERROR_NO_HISTORY = "No benchmark history found"
+ERROR_BENCHMARK_FAILED = "Benchmark failed: {error}"
+
+# Logging Context Keys
+LOG_CONTEXT_STORE_ID = "store_id"
+LOG_CONTEXT_TIMESTAMP = "timestamp"
+LOG_CONTEXT_REGRESSIONS = "regressions_detected"
+
 class ContinuousBenchmarker:
     """Continuous benchmarking system with regression detection."""
     
     def __init__(self, 
-                 base_url: str = "http://localhost:8000",
+                 base_url: str = DEFAULT_BASE_URL,
                  store_id: Optional[str] = None,
-                 db_path: str = "search_knowledge_base.db",
-                 regression_threshold: float = 0.1):  # 10% threshold
+                 db_path: str = DEFAULT_DB_PATH,
+                 regression_threshold: float = DEFAULT_REGRESSION_THRESHOLD):
+        """
+        Initialize continuous benchmarker.
+        
+        Args:
+            base_url: Base URL for API
+            store_id: Store ID for tracking
+            db_path: Database path
+            regression_threshold: Threshold for regression detection
+        """
         self.base_url = base_url
         self.store_id = store_id
         self.db_path = db_path
@@ -51,6 +89,69 @@ class ContinuousBenchmarker:
         
         # Ensure logs directory exists
         Path("logs").mkdir(exist_ok=True)
+    
+    def _calculate_metric_change(self, current_value: float, baseline_value: float) -> float:
+        """
+        Calculate percentage change between current and baseline values.
+        
+        Args:
+            current_value: Current metric value
+            baseline_value: Baseline metric value
+            
+        Returns:
+            Percentage change
+        """
+        if baseline_value > 0:
+            return ((current_value - baseline_value) / baseline_value) * 100
+        return 0.0
+    
+    def _determine_regression_severity(self, change_percentage: float) -> str:
+        """
+        Determine regression severity based on change percentage.
+        
+        Args:
+            change_percentage: Percentage change (negative for regression)
+            
+        Returns:
+            Severity level (low, medium, high)
+        """
+        abs_change = abs(change_percentage)
+        if abs_change > PERFORMANCE_THRESHOLDS["regression_severity"]["high"] * 100:
+            return "high"
+        elif abs_change > PERFORMANCE_THRESHOLDS["regression_severity"]["medium"] * 100:
+            return "medium"
+        else:
+            return "low"
+    
+    def _check_metric_regression(self, metric_name: str, current_value: float, 
+                                baseline_value: float) -> Optional[Dict[str, Any]]:
+        """
+        Check if a specific metric has regressed.
+        
+        Args:
+            metric_name: Name of the metric
+            current_value: Current metric value
+            baseline_value: Baseline metric value
+            
+        Returns:
+            Regression details or None if no regression
+        """
+        if baseline_value <= 0:
+            return None
+        
+        change_percentage = self._calculate_metric_change(current_value, baseline_value)
+        
+        # Check for regression (negative change above threshold)
+        if change_percentage < -self.regression_threshold * 100:
+            return {
+                "metric": metric_name,
+                "baseline": baseline_value,
+                "current": current_value,
+                "change_percentage": change_percentage,
+                "severity": self._determine_regression_severity(change_percentage)
+            }
+        
+        return None
     
     async def run_daily_benchmark(self, 
                                  queries_file: str = "benchmark_queries.csv",
@@ -94,7 +195,16 @@ class ContinuousBenchmarker:
         }
     
     def _detect_regressions(self, results: List, timestamp: datetime) -> Dict[str, any]:
-        """Detect performance regressions compared to baseline."""
+        """
+        Detect performance regressions compared to baseline.
+        
+        Args:
+            results: Benchmark results
+            timestamp: Current timestamp
+            
+        Returns:
+            Regression report
+        """
         if not results:
             return {"regressions_detected": 0, "details": []}
         
@@ -109,25 +219,16 @@ class ContinuousBenchmarker:
             self._create_baseline(current_metrics, timestamp)
             return {"regressions_detected": 0, "details": [], "baseline_created": True}
         
-        # Detect regressions
+        # Detect regressions using helper methods
         regressions = []
         
         for metric_name, current_value in current_metrics.items():
             if metric_name in baseline:
-                baseline_value = baseline[metric_name]
-                
-                if baseline_value > 0:
-                    change_percentage = ((current_value - baseline_value) / baseline_value) * 100
-                    
-                    # Check for regression (negative change above threshold)
-                    if change_percentage < -self.regression_threshold * 100:
-                        regressions.append({
-                            "metric": metric_name,
-                            "baseline": baseline_value,
-                            "current": current_value,
-                            "change_percentage": change_percentage,
-                            "severity": "high" if abs(change_percentage) > 20 else "medium"
-                        })
+                regression = self._check_metric_regression(
+                    metric_name, current_value, baseline[metric_name]
+                )
+                if regression:
+                    regressions.append(regression)
         
         return {
             "regressions_detected": len(regressions),
@@ -260,28 +361,72 @@ class ContinuousBenchmarker:
                 for row in cursor.fetchall()
             ]
     
-    def generate_performance_report(self, days: int = 7) -> Dict[str, any]:
-        """Generate comprehensive performance report."""
-        history = self.get_benchmark_history(days)
+    def _calculate_trend(self, values: List[float]) -> str:
+        """
+        Calculate trend from a list of values.
         
+        Args:
+            values: List of numeric values
+            
+        Returns:
+            Trend description (improving, declining, stable)
+        """
+        if len(values) < 2:
+            return "stable"
+        
+        if values[0] > values[-1]:
+            return "improving"
+        elif values[0] < values[-1]:
+            return "declining"
+        else:
+            return "stable"
+    
+    def _calculate_performance_summary(self, history: List[Dict]) -> Dict[str, Any]:
+        """
+        Calculate performance summary from history.
+        
+        Args:
+            history: Benchmark history
+            
+        Returns:
+            Performance summary
+        """
         if not history:
-            return {"message": "No benchmark history found"}
+            return {}
         
-        # Calculate trends
         scores = [h['avg_score'] for h in history]
         response_times = [h['avg_response_time'] for h in history]
         
-        score_trend = "improving" if scores[0] > scores[-1] else "declining" if scores[0] < scores[-1] else "stable"
-        response_trend = "improving" if response_times[0] < response_times[-1] else "declining" if response_times[0] > response_times[-1] else "stable"
-        
         return {
-            "period_days": days,
             "total_benchmarks": len(history),
             "total_queries": sum(h['query_count'] for h in history),
             "current_avg_score": scores[0] if scores else 0,
             "current_avg_response_time": response_times[0] if response_times else 0,
-            "score_trend": score_trend,
-            "response_time_trend": response_trend,
+            "score_trend": self._calculate_trend(scores),
+            "response_time_trend": self._calculate_trend(response_times)
+        }
+
+    def generate_performance_report(self, days: int = DEFAULT_DAYS_HISTORY) -> Dict[str, any]:
+        """
+        Generate comprehensive performance report.
+        
+        Args:
+            days: Number of days for history
+            
+        Returns:
+            Performance report
+        """
+        history = self.get_benchmark_history(days)
+        
+        if not history:
+            return {"message": ERROR_NO_HISTORY}
+        
+        # Calculate performance summary using helper
+        summary = self._calculate_performance_summary(history)
+        
+        return {
+            "period_days": days,
+            **summary,
             "history": history
         }
 
@@ -355,4 +500,95 @@ async def main():
         print("\n" + "="*60)
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())
+
+# TODO: Future Improvements and Recommendations
+"""
+TODO: Future Improvements and Recommendations
+
+## 🔄 Module Opsplitsing
+- [ ] Split into separate modules:
+  - `benchmark_runner.py` - Benchmark execution logic
+  - `regression_detector.py` - Regression detection and analysis
+  - `performance_analyzer.py` - Performance metrics calculation
+  - `report_generator.py` - Report generation and formatting
+  - `baseline_manager.py` - Baseline management and storage
+  - `continuous_benchmark_orchestrator.py` - Main orchestration
+
+## 🗑️ Functies voor Verwijdering
+- [ ] `main()` - Consider moving to a dedicated CLI module
+- [ ] `_create_regression_alert()` - Consider moving to a dedicated alerting service
+- [ ] `get_benchmark_history()` - Consider moving to a dedicated history service
+- [ ] `_log_benchmark_results()` - Consider moving to a dedicated logging service
+
+## ⚡ Performance Optimalisaties
+- [ ] Implement caching for frequently accessed metrics
+- [ ] Add batch processing for multiple benchmark runs
+- [ ] Implement parallel processing for regression detection
+- [ ] Optimize database queries for large datasets
+- [ ] Add indexing for frequently accessed patterns
+
+## 🏗️ Architectuur Verbeteringen
+- [ ] Implement proper dependency injection
+- [ ] Add configuration management for different environments
+- [ ] Implement proper error recovery mechanisms
+- [ ] Add comprehensive unit and integration tests
+- [ ] Implement proper logging strategy with structured logging
+
+## 🔧 Code Verbeteringen
+- [ ] Add type hints for all methods
+- [ ] Implement proper error handling with custom exceptions
+- [ ] Add comprehensive docstrings for all methods
+- [ ] Implement proper validation for input parameters
+- [ ] Add proper constants for all magic numbers
+
+## 📊 Monitoring en Observability
+- [ ] Add comprehensive metrics collection
+- [ ] Implement proper distributed tracing
+- [ ] Add health checks for the service
+- [ ] Implement proper alerting mechanisms
+- [ ] Add performance monitoring
+
+## 🔒 Security Verbeteringen
+- [ ] Implement proper authentication and authorization
+- [ ] Add input validation and sanitization
+- [ ] Implement proper secrets management
+- [ ] Add audit logging for sensitive operations
+- [ ] Implement proper data encryption
+
+## 🧪 Testing Verbeteringen
+- [ ] Add unit tests for all helper methods
+- [ ] Implement integration tests for benchmark execution
+- [ ] Add performance tests for large datasets
+- [ ] Implement proper mocking strategies
+- [ ] Add end-to-end tests for complete benchmark flow
+
+## 📚 Documentatie Verbeteringen
+- [ ] Add comprehensive API documentation
+- [ ] Implement proper code examples
+- [ ] Add troubleshooting guides
+- [ ] Implement proper changelog management
+- [ ] Add architecture decision records (ADRs)
+
+## 🎯 Specifieke Verbeteringen
+- [ ] Refactor large regression detection methods into smaller, more focused ones
+- [ ] Implement proper error handling for benchmark execution
+- [ ] Add retry mechanisms for failed operations
+- [ ] Implement proper caching strategies
+- [ ] Add support for different output formats
+- [ ] Implement proper progress tracking
+- [ ] Add support for custom benchmark scenarios
+- [ ] Implement proper result aggregation
+- [ ] Add support for different data sources
+- [ ] Implement proper result validation
+- [ ] Add support for real-time benchmark updates
+- [ ] Implement proper data versioning
+- [ ] Add support for benchmark comparison
+- [ ] Implement proper data export functionality
+- [ ] Add support for benchmark templates
+- [ ] Implement proper A/B testing for benchmarks
+- [ ] Add support for personalized benchmarks
+- [ ] Implement proper feedback collection
+- [ ] Add support for benchmark analytics
+- [ ] Implement proper benchmark ranking
+""" 

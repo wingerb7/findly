@@ -37,16 +37,54 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Constants
+DEFAULT_MAX_QUERIES = 100
+DEFAULT_REQUEST_DELAY = 2.0
+DEFAULT_BATCH_SIZE = 5
+DEFAULT_RATE_LIMIT_WINDOW = 3600
+DEFAULT_RATE_LIMIT_MAX_REQUESTS = 50
+DEFAULT_CACHE_TTL = 3600
+DEFAULT_RETRY_ATTEMPTS = 3
+DEFAULT_RETRY_DELAY = 5.0
+DEFAULT_TIMEOUT = 30
+DEFAULT_CONNECT_TIMEOUT = 10
+
+# API Constants
+DEFAULT_BASE_URL = "http://localhost:8000"
+DEFAULT_ENDPOINT = "/api/ai-search"
+DEFAULT_LIMIT = 25
+
+# File Constants
+DEFAULT_QUERIES_FILE = "benchmark_queries.csv"
+DEFAULT_RESULTS_FILE = "enhanced_benchmark_results.csv"
+DEFAULT_LOG_FILE = "enhanced_benchmark.log"
+
+# Performance Constants
+DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 3600
+DEFAULT_MAX_REQUESTS_PER_WINDOW = 50
+DEFAULT_CACHE_TTL_SECONDS = 3600
+
+# Error Messages
+ERROR_RATE_LIMIT_EXCEEDED = "Rate limit exceeded for query: {query}"
+ERROR_REQUEST_FAILED = "Request failed for query: {query}: {error}"
+ERROR_CACHE_MISS = "Cache miss for query: {query}"
+
+# Logging Context Keys
+LOG_CONTEXT_QUERY = "query"
+LOG_CONTEXT_STORE_ID = "store_id"
+LOG_CONTEXT_BATCH_NUMBER = "batch_number"
+LOG_CONTEXT_ENDPOINT = "endpoint"
+
 # Rate limiting and throttling configuration
 BENCHMARK_CONFIG = {
-    "max_queries": 100,  # Maximum number of queries to test
-    "request_delay": 2.0,  # Delay between requests in seconds
-    "batch_size": 5,  # Number of requests to process in parallel
-    "rate_limit_window": 3600,  # Rate limit window in seconds
-    "rate_limit_max_requests": 50,  # Max requests per window
-    "cache_ttl": 3600,  # Cache TTL in seconds
-    "retry_attempts": 3,  # Number of retry attempts for failed requests
-    "retry_delay": 5.0,  # Delay between retries in seconds
+    "max_queries": DEFAULT_MAX_QUERIES,
+    "request_delay": DEFAULT_REQUEST_DELAY,
+    "batch_size": DEFAULT_BATCH_SIZE,
+    "rate_limit_window": DEFAULT_RATE_LIMIT_WINDOW,
+    "rate_limit_max_requests": DEFAULT_RATE_LIMIT_MAX_REQUESTS,
+    "cache_ttl": DEFAULT_CACHE_TTL,
+    "retry_attempts": DEFAULT_RETRY_ATTEMPTS,
+    "retry_delay": DEFAULT_RETRY_DELAY,
 }
 
 # Query categorization patterns
@@ -224,14 +262,26 @@ class EnhancedBenchmarkResult:
 class BenchmarkRateLimiter:
     """Rate limiter specifically for benchmark operations."""
     
-    def __init__(self, max_requests: int = 50, window_seconds: int = 3600):
+    def __init__(self, max_requests: int = DEFAULT_MAX_REQUESTS_PER_WINDOW, window_seconds: int = DEFAULT_RATE_LIMIT_WINDOW_SECONDS):
+        """
+        Initialize benchmark rate limiter.
+        
+        Args:
+            max_requests: Maximum requests per window
+            window_seconds: Rate limit window in seconds
+        """
         self.max_requests = max_requests
         self.window_seconds = window_seconds
         self.request_timestamps = []
         self.lock = asyncio.Lock()
     
     async def check_rate_limit(self) -> Tuple[bool, float]:
-        """Check if we can make another request."""
+        """
+        Check if we can make another request.
+        
+        Returns:
+            Tuple of (can_proceed, wait_time)
+        """
         async with self.lock:
             current_time = time.time()
             window_start = current_time - self.window_seconds
@@ -262,16 +312,40 @@ class BenchmarkRateLimiter:
 class BenchmarkCache:
     """Simple in-memory cache for benchmark results."""
     
-    def __init__(self, ttl_seconds: int = 3600):
+    def __init__(self, ttl_seconds: int = DEFAULT_CACHE_TTL_SECONDS):
+        """
+        Initialize benchmark cache.
+        
+        Args:
+            ttl_seconds: Time to live for cached items in seconds
+        """
         self.cache = {}
         self.ttl_seconds = ttl_seconds
     
     def _generate_cache_key(self, query: str, endpoint: str) -> str:
-        """Generate cache key for query and endpoint."""
+        """
+        Generate cache key for query and endpoint.
+        
+        Args:
+            query: Search query
+            endpoint: API endpoint
+            
+        Returns:
+            MD5 hash of the cache key
+        """
         return hashlib.md5(f"{query}:{endpoint}".encode()).hexdigest()
     
     def get(self, query: str, endpoint: str) -> Optional[Dict[str, Any]]:
-        """Get cached result."""
+        """
+        Get cached result.
+        
+        Args:
+            query: Search query
+            endpoint: API endpoint
+            
+        Returns:
+            Cached data if available and not expired, None otherwise
+        """
         key = self._generate_cache_key(query, endpoint)
         if key in self.cache:
             timestamp, data = self.cache[key]
@@ -283,7 +357,14 @@ class BenchmarkCache:
         return None
     
     def set(self, query: str, endpoint: str, data: Dict[str, Any]) -> None:
-        """Set cached result."""
+        """
+        Set cached result.
+        
+        Args:
+            query: Search query
+            endpoint: API endpoint
+            data: Data to cache
+        """
         key = self._generate_cache_key(query, endpoint)
         self.cache[key] = (time.time(), data)
     
@@ -295,37 +376,30 @@ class QueryAnalyzer:
     """Analyzes queries for intent detection and categorization."""
     
     def __init__(self):
+        """Initialize query analyzer with predefined categories."""
         self.categories = QUERY_CATEGORIES
     
     def analyze_query(self, query: str) -> QueryAnalysis:
-        """Analyze a query for intents and complexity."""
+        """
+        Analyze a query for intents and complexity.
+        
+        Args:
+            query: Query string to analyze
+            
+        Returns:
+            QueryAnalysis object with detected intents and complexity
+        """
         query_lower = query.lower()
         
-        detected_intents = {}
-        intent_confidence = {}
-        
         # Detect intents for each category
-        for category, keywords in self.categories.items():
-            matches = []
-            for keyword in keywords:
-                if keyword in query_lower:
-                    matches.append(keyword)
-            
-            if matches:
-                detected_intents[category] = matches
-                # Calculate confidence based on number and specificity of matches
-                intent_confidence[category] = min(1.0, len(matches) * 0.3)
+        detected_intents = self._detect_intents(query_lower)
+        intent_confidence = self._calculate_intent_confidence(detected_intents)
         
         # Calculate complexity score
         complexity_score = self._calculate_complexity(query, detected_intents)
         
         # Determine expected difficulty
-        if complexity_score < 0.3:
-            expected_difficulty = "easy"
-        elif complexity_score < 0.7:
-            expected_difficulty = "medium"
-        else:
-            expected_difficulty = "hard"
+        expected_difficulty = self._determine_difficulty(complexity_score)
         
         return QueryAnalysis(
             query=query,
@@ -335,50 +409,138 @@ class QueryAnalyzer:
             expected_difficulty=expected_difficulty
         )
     
+    def _detect_intents(self, query_lower: str) -> Dict[str, List[str]]:
+        """
+        Detect intents for each category.
+        
+        Args:
+            query_lower: Lowercase query string
+            
+        Returns:
+            Dictionary of detected intents by category
+        """
+        detected_intents = {}
+        
+        for category, keywords in self.categories.items():
+            matches = []
+            for keyword in keywords:
+                if keyword in query_lower:
+                    matches.append(keyword)
+            
+            if matches:
+                detected_intents[category] = matches
+        
+        return detected_intents
+    
+    def _calculate_intent_confidence(self, detected_intents: Dict[str, List[str]]) -> Dict[str, float]:
+        """
+        Calculate confidence scores for detected intents.
+        
+        Args:
+            detected_intents: Dictionary of detected intents
+            
+        Returns:
+            Dictionary of confidence scores by category
+        """
+        intent_confidence = {}
+        
+        for category, matches in detected_intents.items():
+            # Calculate confidence based on number and specificity of matches
+            intent_confidence[category] = min(1.0, len(matches) * 0.3)
+        
+        return intent_confidence
+    
     def _calculate_complexity(self, query: str, intents: Dict[str, List[str]]) -> float:
-        """Calculate query complexity score."""
+        """
+        Calculate query complexity score.
+        
+        Args:
+            query: Query string
+            intents: Detected intents
+            
+        Returns:
+            Complexity score between 0 and 1
+        """
         base_complexity = len(query.split()) / 10.0  # Normalize by word count
         
         # Add complexity for multiple intents
         intent_complexity = len(intents) * 0.2
         
         # Add complexity for specific patterns
+        pattern_complexity = self._calculate_pattern_complexity(query)
+        
+        total_complexity = base_complexity + intent_complexity + pattern_complexity
+        return min(1.0, total_complexity)
+    
+    def _calculate_pattern_complexity(self, query: str) -> float:
+        """
+        Calculate complexity based on query patterns.
+        
+        Args:
+            query: Query string
+            
+        Returns:
+            Pattern complexity score
+        """
         pattern_complexity = 0.0
+        
         if re.search(r'\d+', query):  # Numbers
             pattern_complexity += 0.1
         if re.search(r'[€$]', query):  # Currency
             pattern_complexity += 0.1
-        if re.search(r'voor\s+\w+', query):  # Purpose/occasion
+        if re.search(r'[A-Z]{2,}', query):  # Acronyms
+            pattern_complexity += 0.1
+        if re.search(r'[^\w\s]', query):  # Special characters
             pattern_complexity += 0.1
         
-        return min(1.0, base_complexity + intent_complexity + pattern_complexity)
+        return pattern_complexity
+    
+    def _determine_difficulty(self, complexity_score: float) -> str:
+        """
+        Determine expected difficulty based on complexity score.
+        
+        Args:
+            complexity_score: Calculated complexity score
+            
+        Returns:
+            Difficulty level: 'easy', 'medium', or 'hard'
+        """
+        if complexity_score < 0.3:
+            return "easy"
+        elif complexity_score < 0.7:
+            return "medium"
+        else:
+            return "hard"
     
     def get_primary_intent(self, detected_intents: Dict[str, List[str]]) -> str:
-        """Get the primary intent category from detected intents."""
+        """
+        Get the primary intent from detected intents.
+        
+        Args:
+            detected_intents: Dictionary of detected intents
+            
+        Returns:
+            Primary intent category
+        """
         if not detected_intents:
             return "general"
         
-        # Prioritize certain intent types
-        priority_order = [
-            "category_intent", "price_intent", "color_intent", 
-            "material_intent", "occasion_intent", "brand_intent",
-            "size_intent", "gender_intent", "season_intent", "quality_intent"
-        ]
-        
-        for intent_type in priority_order:
-            if intent_type in detected_intents:
-                return intent_type
-        
-        # Return first intent if no priority match
-        return list(detected_intents.keys())[0]
+        # Sort by number of matches (descending)
+        sorted_intents = sorted(detected_intents.items(), key=lambda x: len(x[1]), reverse=True)
+        return sorted_intents[0][0]
     
     def get_secondary_intents(self, detected_intents: Dict[str, List[str]], primary_intent: str) -> List[str]:
-        """Get secondary intent categories."""
-        secondary = []
-        for intent_type in detected_intents:
-            if intent_type != primary_intent:
-                secondary.append(intent_type)
-        return secondary
+        """
+        Get secondary intents (all except primary).
+        
+        Args:
+            detected_intents: Dictionary of detected intents
+            primary_intent: Primary intent category
+            
+        Returns:
+            List of secondary intent categories
+        """
+        return [intent for intent in detected_intents.keys() if intent != primary_intent]
 
 class HistoricalTrendAnalyzer:
     """Analyzes historical trends and baseline comparisons."""
@@ -676,7 +838,7 @@ class AutomaticRelevanceScorer:
 class EnhancedSearchBenchmarker:
     """Enhanced benchmark class with comprehensive analysis and rate limiting."""
     
-    def __init__(self, base_url: str = "http://localhost:8000", headless: bool = False, store_id: Optional[str] = None, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, base_url: str = DEFAULT_BASE_URL, headless: bool = False, store_id: Optional[str] = None, config: Optional[Dict[str, Any]] = None):
         self.base_url = base_url.rstrip('/')
         self.headless = headless
         self.store_id = store_id
@@ -747,7 +909,7 @@ class EnhancedSearchBenchmarker:
         if self.session:
             await self.session.close()
     
-    async def execute_search(self, query: str, endpoint: str = "/api/ai-search", limit: int = 25) -> Dict[str, Any]:
+    async def execute_search(self, query: str, endpoint: str = DEFAULT_ENDPOINT, limit: int = DEFAULT_LIMIT) -> Dict[str, Any]:
         """Execute a single search query with enhanced tracking, rate limiting, and caching."""
         self.stats["total_requests"] += 1
         
@@ -836,7 +998,15 @@ class EnhancedSearchBenchmarker:
                 }
     
     def parse_enhanced_results(self, results: List[Dict[str, Any]]) -> List[EnhancedSearchResult]:
-        """Parse search results with enhanced metadata extraction."""
+        """
+        Parse search results with enhanced metadata extraction.
+        
+        Args:
+            results: List of raw search results
+            
+        Returns:
+            List of EnhancedSearchResult objects
+        """
         enhanced_results = []
         
         for result in results:
@@ -847,21 +1017,18 @@ class EnhancedSearchBenchmarker:
                 similarity = float(result.get('similarity', 0))
                 tags = result.get('tags', [])
                 
-                # Extract metadata from tags
-                category = self._extract_category(tags)
-                brand = self._extract_brand(tags)
-                material = self._extract_material(tags)
-                color = self._extract_color(tags)
+                # Extract metadata from tags using helper
+                metadata = self._extract_metadata_from_tags(tags)
                 
                 enhanced_results.append(EnhancedSearchResult(
                     title=title,
                     price=price,
                     similarity=similarity,
                     tags=tags,
-                    category=category,
-                    brand=brand,
-                    material=material,
-                    color=color
+                    category=metadata['category'],
+                    brand=metadata['brand'],
+                    material=metadata['material'],
+                    color=metadata['color']
                 ))
             except (ValueError, TypeError) as e:
                 logger.warning(f"⚠️ Failed to parse result: {e}")
@@ -869,8 +1036,33 @@ class EnhancedSearchBenchmarker:
         
         return enhanced_results
     
+    def _extract_metadata_from_tags(self, tags: List[str]) -> Dict[str, Optional[str]]:
+        """
+        Extract metadata from tags.
+        
+        Args:
+            tags: List of tags
+            
+        Returns:
+            Dictionary with extracted metadata
+        """
+        return {
+            'category': self._extract_category(tags),
+            'brand': self._extract_brand(tags),
+            'material': self._extract_material(tags),
+            'color': self._extract_color(tags)
+        }
+    
     def _extract_category(self, tags: List[str]) -> Optional[str]:
-        """Extract category from tags."""
+        """
+        Extract category from tags.
+        
+        Args:
+            tags: List of tags
+            
+        Returns:
+            Extracted category or None
+        """
         category_keywords = ["schoenen", "jas", "shirt", "broek", "jurk", "trui", "hoodie", "blazer", "accessoire", "tas"]
         for tag in tags:
             if tag.lower() in category_keywords:
@@ -878,7 +1070,15 @@ class EnhancedSearchBenchmarker:
         return None
     
     def _extract_brand(self, tags: List[str]) -> Optional[str]:
-        """Extract brand from tags."""
+        """
+        Extract brand from tags.
+        
+        Args:
+            tags: List of tags
+            
+        Returns:
+            Extracted brand or None
+        """
         brand_keywords = ["urbanwear", "fashionista", "stylehub", "classicline", "elegance", "sportflex", "trendify"]
         for tag in tags:
             if tag.lower() in brand_keywords:
@@ -886,7 +1086,15 @@ class EnhancedSearchBenchmarker:
         return None
     
     def _extract_material(self, tags: List[str]) -> Optional[str]:
-        """Extract material from tags."""
+        """
+        Extract material from tags.
+        
+        Args:
+            tags: List of tags
+            
+        Returns:
+            Extracted material or None
+        """
         material_keywords = ["leer", "katoen", "wol", "zijde", "denim", "linnen", "polyester", "synthetisch", "kashmir"]
         for tag in tags:
             if tag.lower() in material_keywords:
@@ -894,7 +1102,15 @@ class EnhancedSearchBenchmarker:
         return None
     
     def _extract_color(self, tags: List[str]) -> Optional[str]:
-        """Extract color from tags."""
+        """
+        Extract color from tags.
+        
+        Args:
+            tags: List of tags
+            
+        Returns:
+            Extracted color or None
+        """
         color_keywords = ["zwart", "rood", "blauw", "wit", "groen", "geel", "paars", "oranje", "grijs", "bruin", "beige"]
         for tag in tags:
             if tag.lower() in color_keywords:
@@ -1077,7 +1293,7 @@ Antwoord in JSON formaat:
             logger.error(f"❌ GPT scoring failed: {e}")
             return 0.5, f"GPT error: {e}"
     
-    async def benchmark_query(self, query: str, endpoint: str = "/api/ai-search") -> EnhancedBenchmarkResult:
+    async def benchmark_query(self, query: str, endpoint: str = DEFAULT_ENDPOINT) -> EnhancedBenchmarkResult:
         """Execute full enhanced benchmark for a single query."""
         # Analyze query first
         query_analysis = self.query_analyzer.analyze_query(query)
@@ -1217,9 +1433,9 @@ Antwoord in JSON formaat:
             store_id=self.store_id
         )
     
-    async def run_enhanced_benchmark(self, queries_file: str = "benchmark_queries.csv", 
-                                   results_file: str = "enhanced_benchmark_results.csv",
-                                   endpoint: str = "/api/ai-search") -> List[EnhancedBenchmarkResult]:
+    async def run_enhanced_benchmark(self, queries_file: str = DEFAULT_QUERIES_FILE, 
+                                   results_file: str = DEFAULT_RESULTS_FILE,
+                                   endpoint: str = DEFAULT_ENDPOINT) -> List[EnhancedBenchmarkResult]:
         """Run enhanced benchmark with rate limiting and throttling."""
         # Record start time
         self.stats["start_time"] = time.time()
@@ -1555,20 +1771,20 @@ async def main():
     """Main function."""
     parser = argparse.ArgumentParser(description="Enhanced Search Quality Benchmark Tool with Rate Limiting")
     parser.add_argument("--headless", action="store_true", help="Run in headless mode (no console output)")
-    parser.add_argument("--endpoint", default="/api/ai-search", help="API endpoint to test")
-    parser.add_argument("--queries", default="benchmark_queries.csv", help="CSV file with test queries")
-    parser.add_argument("--results", default="enhanced_benchmark_results.csv", help="CSV file to save results")
-    parser.add_argument("--base-url", default="http://localhost:8000", help="Base URL for API")
+    parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT, help="API endpoint to test")
+    parser.add_argument("--queries", default=DEFAULT_QUERIES_FILE, help="CSV file with test queries")
+    parser.add_argument("--results", default=DEFAULT_RESULTS_FILE, help="CSV file to save results")
+    parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help="Base URL for API")
     parser.add_argument("--store-id", help="Store ID for tracking")
     
     # Rate limiting arguments
-    parser.add_argument("--max-queries", type=int, default=100, help="Maximum number of queries to test (default: 100)")
-    parser.add_argument("--request-delay", type=float, default=2.0, help="Delay between request batches in seconds (default: 2.0)")
-    parser.add_argument("--batch-size", type=int, default=5, help="Number of requests to process in parallel (default: 5)")
-    parser.add_argument("--rate-limit-max", type=int, default=50, help="Maximum requests per rate limit window (default: 50)")
-    parser.add_argument("--rate-limit-window", type=int, default=3600, help="Rate limit window in seconds (default: 3600)")
-    parser.add_argument("--retry-attempts", type=int, default=3, help="Number of retry attempts for failed requests (default: 3)")
-    parser.add_argument("--retry-delay", type=float, default=5.0, help="Delay between retries in seconds (default: 5.0)")
+    parser.add_argument("--max-queries", type=int, default=DEFAULT_MAX_QUERIES, help="Maximum number of queries to test (default: 100)")
+    parser.add_argument("--request-delay", type=float, default=DEFAULT_REQUEST_DELAY, help="Delay between request batches in seconds (default: 2.0)")
+    parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE, help="Number of requests to process in parallel (default: 5)")
+    parser.add_argument("--rate-limit-max", type=int, default=DEFAULT_RATE_LIMIT_MAX_REQUESTS, help="Maximum requests per rate limit window (default: 50)")
+    parser.add_argument("--rate-limit-window", type=int, default=DEFAULT_RATE_LIMIT_WINDOW, help="Rate limit window in seconds (default: 3600)")
+    parser.add_argument("--retry-attempts", type=int, default=DEFAULT_RETRY_ATTEMPTS, help="Number of retry attempts for failed requests (default: 3)")
+    parser.add_argument("--retry-delay", type=float, default=DEFAULT_RETRY_DELAY, help="Delay between retries in seconds (default: 5.0)")
     
     args = parser.parse_args()
     
@@ -1598,4 +1814,85 @@ async def main():
         )
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())
+
+# TODO: Future Improvements and Recommendations
+"""
+TODO: Future Improvements and Recommendations
+
+## 🔄 Module Opsplitsing
+- [ ] Split into separate modules:
+  - `benchmark_rate_limiter.py` - Rate limiting and throttling
+  - `benchmark_cache.py` - Caching functionality
+  - `query_analyzer.py` - Query analysis and intent detection
+  - `historical_trend_analyzer.py` - Historical trend analysis
+  - `facet_filter_mapper.py` - Facet and filter mapping
+  - `automatic_relevance_scorer.py` - Automatic relevance scoring
+  - `enhanced_benchmark_orchestrator.py` - Main benchmark orchestration
+
+## 🗑️ Functies voor Verwijdering
+- [ ] `_get_openai_key()` - Consider moving to a dedicated configuration service
+- [ ] `_print_enhanced_summary()` - Consider moving to a dedicated reporting service
+- [ ] `_print_rate_limiting_stats()` - Consider moving to a dedicated monitoring service
+
+## ⚡ Performance Optimalisaties
+- [ ] Implement connection pooling for aiohttp sessions
+- [ ] Add caching for frequently accessed query analysis results
+- [ ] Implement batch processing for GPT scoring
+- [ ] Add parallel processing for query analysis
+- [ ] Optimize database operations for historical trends
+
+## 🏗️ Architectuur Verbeteringen
+- [ ] Implement proper dependency injection
+- [ ] Add configuration management for different environments
+- [ ] Implement proper error recovery mechanisms
+- [ ] Add comprehensive unit and integration tests
+- [ ] Implement proper logging strategy with structured logging
+
+## 🔧 Code Verbeteringen
+- [ ] Add type hints for all methods
+- [ ] Implement proper error handling with custom exceptions
+- [ ] Add comprehensive docstrings for all methods
+- [ ] Implement proper validation for input parameters
+- [ ] Add proper constants for all magic numbers
+
+## 📊 Monitoring en Observability
+- [ ] Add comprehensive metrics collection
+- [ ] Implement proper distributed tracing
+- [ ] Add health checks for the service
+- [ ] Implement proper alerting mechanisms
+- [ ] Add performance monitoring
+
+## 🔒 Security Verbeteringen
+- [ ] Implement proper authentication and authorization
+- [ ] Add input validation and sanitization
+- [ ] Implement proper secrets management
+- [ ] Add audit logging for sensitive operations
+- [ ] Implement proper rate limiting strategies
+
+## 🧪 Testing Verbeteringen
+- [ ] Add unit tests for all helper methods
+- [ ] Implement integration tests for API communication
+- [ ] Add performance tests for benchmark operations
+- [ ] Implement proper mocking strategies
+- [ ] Add end-to-end tests for complete benchmark flow
+
+## 📚 Documentatie Verbeteringen
+- [ ] Add comprehensive API documentation
+- [ ] Implement proper code examples
+- [ ] Add troubleshooting guides
+- [ ] Implement proper changelog management
+- [ ] Add architecture decision records (ADRs)
+
+## 🎯 Specifieke Verbeteringen
+- [ ] Refactor large dataclasses into smaller, more focused ones
+- [ ] Implement proper error handling for GPT API calls
+- [ ] Add retry mechanisms for failed requests
+- [ ] Implement proper caching strategies
+- [ ] Add support for different output formats
+- [ ] Implement proper progress tracking
+- [ ] Add support for custom metrics
+- [ ] Implement proper result aggregation
+- [ ] Add support for different query sources
+- [ ] Implement proper result validation
+""" 

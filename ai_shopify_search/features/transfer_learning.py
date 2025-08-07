@@ -38,6 +38,42 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Constants
+DEFAULT_DB_PATH = "data/databases/findly_consolidated.db"
+DEFAULT_SIMILAR_STORES_LIMIT = 5
+DEFAULT_SIMILARITY_WEIGHTS = {
+    "category_distribution": 0.3,
+    "price_range": 0.25,
+    "product_count": 0.15,
+    "performance_metrics": 0.2,
+    "query_patterns": 0.1
+}
+
+# Similarity thresholds
+SIMILARITY_THRESHOLDS = {
+    "high_similarity": 0.8,
+    "medium_similarity": 0.6,
+    "low_similarity": 0.4,
+    "minimum_similarity": 0.2
+}
+
+# Risk levels
+RISK_LEVELS = {
+    "low": "low",
+    "medium": "medium", 
+    "high": "high"
+}
+
+# Error Messages
+ERROR_TARGET_STORE_NOT_FOUND = "Target store {store_id} not found"
+ERROR_STORING_TRANSFER = "Error storing transfer application: {error}"
+ERROR_GETTING_HISTORY = "Error getting transfer history: {error}"
+
+# Logging Context Keys
+LOG_CONTEXT_TARGET_STORE = "target_store_id"
+LOG_CONTEXT_SIMILAR_STORES = "similar_stores_count"
+LOG_CONTEXT_PATTERN_TYPE = "pattern_type"
+
 @dataclass
 class TransferablePattern:
     """Represents a transferable pattern from one store to another."""
@@ -72,44 +108,151 @@ class TransferRecommendation:
 class TransferLearningEngine:
     """Engine for transferring knowledge between similar stores."""
     
-    def __init__(self, db_path: str = "data/databases/findly_consolidated.db"):
+    def __init__(self, db_path: str = DEFAULT_DB_PATH):
         self.db_path = db_path
         self.knowledge_builder = KnowledgeBaseBuilder(db_path)
         
         # Similarity weights for different factors
-        self.similarity_weights = {
-            "category_distribution": 0.3,
-            "price_range": 0.25,
-            "product_count": 0.15,
-            "performance_metrics": 0.2,
-            "query_patterns": 0.1
+        self.similarity_weights = DEFAULT_SIMILARITY_WEIGHTS
+    
+    def _get_target_profile(self, target_store_id: str):
+        """
+        Get target store profile.
+        
+        Args:
+            target_store_id: Target store ID
+            
+        Returns:
+            Store profile or None if not found
+        """
+        target_profile = self.knowledge_builder.get_store_profile(target_store_id)
+        if not target_profile:
+            logger.warning(ERROR_TARGET_STORE_NOT_FOUND.format(store_id=target_store_id))
+        return target_profile
+    
+    def _get_other_store_profiles(self, target_store_id: str):
+        """
+        Get all other store profiles from database.
+        
+        Args:
+            target_store_id: Target store ID to exclude
+            
+        Returns:
+            List of store profiles
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("""
+                SELECT * FROM store_profiles WHERE store_id != ?
+            """, (target_store_id,))
+            
+            return [self._row_to_store_profile(row) for row in cursor.fetchall()]
+    
+    def _filter_similar_stores(self, similar_stores: List[StoreSimilarity], limit: int) -> List[StoreSimilarity]:
+        """
+        Filter and sort similar stores by similarity score.
+        
+        Args:
+            similar_stores: List of similar stores
+            limit: Maximum number of stores to return
+            
+        Returns:
+            Filtered and sorted list of similar stores
+        """
+        # Sort by similarity score and return top results
+        similar_stores.sort(key=lambda x: x.similarity_score, reverse=True)
+        return similar_stores[:limit]
+    
+    def _calculate_weighted_similarity_score(self, similarity_factors: Dict[str, float]) -> float:
+        """
+        Calculate weighted similarity score from factors.
+        
+        Args:
+            similarity_factors: Dictionary of similarity factors
+            
+        Returns:
+            Weighted similarity score
+        """
+        total_score = 0
+        total_weight = 0
+        
+        for factor, weight in self.similarity_weights.items():
+            if factor in similarity_factors:
+                total_score += similarity_factors[factor] * weight
+                total_weight += weight
+        
+        return total_score / total_weight if total_weight > 0 else 0
+    
+    def _group_patterns_by_type(self, similar_stores: List[StoreSimilarity]) -> Dict[str, List[TransferablePattern]]:
+        """
+        Group patterns by type from similar stores.
+        
+        Args:
+            similar_stores: List of similar stores
+            
+        Returns:
+            Dictionary with patterns grouped by type
+        """
+        pattern_groups = {}
+        
+        for store_sim in similar_stores:
+            patterns = self.extract_transferable_patterns(store_sim.store_id_2)
+            
+            for pattern in patterns:
+                if pattern.pattern_type not in pattern_groups:
+                    pattern_groups[pattern.pattern_type] = []
+                pattern_groups[pattern.pattern_type].append(pattern)
+        
+        return pattern_groups
+    
+    def _filter_valid_pattern_groups(self, pattern_groups: Dict[str, List[TransferablePattern]]) -> Dict[str, List[TransferablePattern]]:
+        """
+        Filter pattern groups to only include those with sufficient patterns.
+        
+        Args:
+            pattern_groups: Dictionary with patterns grouped by type
+            
+        Returns:
+            Filtered pattern groups
+        """
+        return {
+            pattern_type: patterns 
+            for pattern_type, patterns in pattern_groups.items() 
+            if len(patterns) >= 2  # Need at least 2 similar patterns
         }
     
-    def find_similar_stores(self, target_store_id: str, limit: int = 5) -> List[StoreSimilarity]:
+    def _sort_recommendations_by_improvement(self, recommendations: List[TransferRecommendation]) -> List[TransferRecommendation]:
+        """
+        Sort recommendations by expected improvement.
+        
+        Args:
+            recommendations: List of transfer recommendations
+            
+        Returns:
+            Sorted list of recommendations
+        """
+        recommendations.sort(key=lambda x: x.expected_improvement, reverse=True)
+        return recommendations
+    
+    def find_similar_stores(self, target_store_id: str, limit: int = DEFAULT_SIMILAR_STORES_LIMIT) -> List[StoreSimilarity]:
         """Find stores similar to the target store."""
         try:
-            target_profile = self.knowledge_builder.get_store_profile(target_store_id)
+            target_profile = self._get_target_profile(target_store_id)
             if not target_profile:
-                logger.warning(f"Target store {target_store_id} not found")
                 return []
             
             # Get all other store profiles
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.execute("""
-                    SELECT * FROM store_profiles WHERE store_id != ?
-                """, (target_store_id,))
+            other_profiles = self._get_other_store_profiles(target_store_id)
+            
+            similar_stores = []
+            for other_profile in other_profiles:
+                similarity = self._calculate_store_similarity(target_profile, other_profile)
                 
-                similar_stores = []
-                for row in cursor.fetchall():
-                    other_profile = self._row_to_store_profile(row)
-                    similarity = self._calculate_store_similarity(target_profile, other_profile)
-                    
-                    if similarity.similarity_score > 0.3:  # Minimum similarity threshold
-                        similar_stores.append(similarity)
-                
-                # Sort by similarity score and return top results
-                similar_stores.sort(key=lambda x: x.similarity_score, reverse=True)
-                return similar_stores[:limit]
+                if similarity.similarity_score > SIMILARITY_THRESHOLDS["minimum_similarity"]:  # Minimum similarity threshold
+                    similar_stores.append(similarity)
+            
+            # Sort by similarity score and return top results
+            similar_stores = self._filter_similar_stores(similar_stores, limit)
+            return similar_stores
                 
         except Exception as e:
             logger.error(f"Error finding similar stores: {e}")
@@ -146,15 +289,7 @@ class TransferLearningEngine:
         similarity_factors["query_patterns"] = pattern_sim
         
         # Calculate weighted similarity score
-        total_score = 0
-        total_weight = 0
-        
-        for factor, weight in self.similarity_weights.items():
-            if factor in similarity_factors:
-                total_score += similarity_factors[factor] * weight
-                total_weight += weight
-        
-        similarity_score = total_score / total_weight if total_weight > 0 else 0
+        similarity_score = self._calculate_weighted_similarity_score(similarity_factors)
         
         # Calculate confidence based on data quality
         confidence = self._calculate_similarity_confidence(similarity_factors)
@@ -338,27 +473,21 @@ class TransferLearningEngine:
         if not similar_stores:
             return []
         
-        recommendations = []
-        
         # Group patterns by type
-        pattern_groups = {}
-        for store_sim in similar_stores:
-            patterns = self.extract_transferable_patterns(store_sim.store_id_2)
-            
-            for pattern in patterns:
-                if pattern.pattern_type not in pattern_groups:
-                    pattern_groups[pattern.pattern_type] = []
-                pattern_groups[pattern.pattern_type].append(pattern)
+        pattern_groups = self._group_patterns_by_type(similar_stores)
+        
+        # Filter valid pattern groups
+        valid_pattern_groups = self._filter_valid_pattern_groups(pattern_groups)
         
         # Generate recommendations for each pattern type
-        for pattern_type, patterns in pattern_groups.items():
-            if len(patterns) >= 2:  # Need at least 2 similar patterns
-                recommendation = self._create_recommendation(pattern_type, patterns, similar_stores)
-                if recommendation:
-                    recommendations.append(recommendation)
+        recommendations = []
+        for pattern_type, patterns in valid_pattern_groups.items():
+            recommendation = self._create_recommendation(pattern_type, patterns, similar_stores)
+            if recommendation:
+                recommendations.append(recommendation)
         
         # Sort by expected improvement
-        recommendations.sort(key=lambda x: x.expected_improvement, reverse=True)
+        recommendations = self._sort_recommendations_by_improvement(recommendations)
         
         return recommendations
     
@@ -380,7 +509,7 @@ class TransferLearningEngine:
         expected_improvement = avg_success_rate * avg_confidence * 0.8  # Conservative estimate
         
         # Determine risk level
-        risk_level = "low" if avg_confidence > 0.8 else "medium" if avg_confidence > 0.6 else "high"
+        risk_level = RISK_LEVELS["low"] if avg_confidence > 0.8 else RISK_LEVELS["medium"] if avg_confidence > 0.6 else RISK_LEVELS["high"]
         
         return TransferRecommendation(
             pattern_type=pattern_type,
@@ -590,5 +719,96 @@ class TransferLearningEngine:
                 return history
                 
         except Exception as e:
-            logger.error(f"Error getting transfer history: {e}")
-            return [] 
+            logger.error(ERROR_GETTING_HISTORY.format(error=str(e)))
+            return []
+
+# TODO: Future Improvements and Recommendations
+"""
+TODO: Future Improvements and Recommendations
+
+## 🔄 Module Opsplitsing
+- [ ] Split into separate modules:
+  - `store_similarity_analyzer.py` - Store similarity analysis
+  - `pattern_extractor.py` - Pattern extraction logic
+  - `recommendation_generator.py` - Transfer recommendation generation
+  - `transfer_applicator.py` - Transfer application logic
+  - `similarity_calculator.py` - Similarity calculation methods
+  - `transfer_learning_orchestrator.py` - Main orchestration
+
+## 🗑️ Functies voor Verwijdering
+- [ ] `_row_to_store_profile()` - Consider moving to a dedicated data mapper
+- [ ] `_store_transfer_application()` - Consider moving to a dedicated storage service
+- [ ] `get_transfer_history()` - Consider moving to a dedicated history service
+- [ ] `SimpleStoreProfile` - Consider moving to a dedicated model module
+
+## ⚡ Performance Optimalisaties
+- [ ] Implement caching for frequently accessed store profiles
+- [ ] Add batch processing for multiple similarity calculations
+- [ ] Implement parallel processing for pattern extraction
+- [ ] Optimize database queries for large datasets
+- [ ] Add indexing for frequently accessed patterns
+
+## 🏗️ Architectuur Verbeteringen
+- [ ] Implement proper dependency injection
+- [ ] Add configuration management for different environments
+- [ ] Implement proper error recovery mechanisms
+- [ ] Add comprehensive unit and integration tests
+- [ ] Implement proper logging strategy with structured logging
+
+## 🔧 Code Verbeteringen
+- [ ] Add type hints for all methods
+- [ ] Implement proper error handling with custom exceptions
+- [ ] Add comprehensive docstrings for all methods
+- [ ] Implement proper validation for input parameters
+- [ ] Add proper constants for all magic numbers
+
+## 📊 Monitoring en Observability
+- [ ] Add comprehensive metrics collection
+- [ ] Implement proper distributed tracing
+- [ ] Add health checks for the service
+- [ ] Implement proper alerting mechanisms
+- [ ] Add performance monitoring
+
+## 🔒 Security Verbeteringen
+- [ ] Implement proper authentication and authorization
+- [ ] Add input validation and sanitization
+- [ ] Implement proper secrets management
+- [ ] Add audit logging for sensitive operations
+- [ ] Implement proper data encryption
+
+## 🧪 Testing Verbeteringen
+- [ ] Add unit tests for all helper methods
+- [ ] Implement integration tests for similarity calculations
+- [ ] Add performance tests for large datasets
+- [ ] Implement proper mocking strategies
+- [ ] Add end-to-end tests for complete transfer learning flow
+
+## 📚 Documentatie Verbeteringen
+- [ ] Add comprehensive API documentation
+- [ ] Implement proper code examples
+- [ ] Add troubleshooting guides
+- [ ] Implement proper changelog management
+- [ ] Add architecture decision records (ADRs)
+
+## 🎯 Specifieke Verbeteringen
+- [ ] Refactor large similarity calculation methods into smaller, more focused ones
+- [ ] Implement proper error handling for database operations
+- [ ] Add retry mechanisms for failed operations
+- [ ] Implement proper caching strategies
+- [ ] Add support for different output formats
+- [ ] Implement proper progress tracking
+- [ ] Add support for custom similarity metrics
+- [ ] Implement proper result aggregation
+- [ ] Add support for different data sources
+- [ ] Implement proper result validation
+- [ ] Add support for real-time transfer learning updates
+- [ ] Implement proper data versioning
+- [ ] Add support for transfer learning comparison
+- [ ] Implement proper data export functionality
+- [ ] Add support for transfer learning templates
+- [ ] Implement proper A/B testing for transfer learning
+- [ ] Add support for personalized transfer learning
+- [ ] Implement proper feedback collection
+- [ ] Add support for transfer learning analytics
+- [ ] Implement proper transfer learning ranking
+""" 

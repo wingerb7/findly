@@ -25,6 +25,45 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 logger = logging.getLogger(__name__)
 
+# Constants
+DEFAULT_DB_PATH = "search_knowledge_base.db"
+DEFAULT_PROFILE_VERSION = "1.0"
+DEFAULT_CONFIDENCE_THRESHOLD = 0.7
+DEFAULT_DATA_QUALITY_THRESHOLD = 0.7
+DEFAULT_SIMILARITY_LIMIT = 5
+
+# Similarity weights for store comparison
+SIMILARITY_WEIGHTS = {
+    "category": 0.3,
+    "price": 0.25,
+    "performance": 0.25,
+    "search": 0.2
+}
+
+# Price sensitivity thresholds
+PRICE_SENSITIVITY_THRESHOLDS = {
+    "low": 50.0,
+    "medium": 200.0,
+    "high": float('inf')
+}
+
+# Performance thresholds
+PERFORMANCE_THRESHOLDS = {
+    "search_score": 0.6,
+    "fallback_usage": 0.3,
+    "data_quality": 0.7
+}
+
+# Error Messages
+ERROR_STORE_NOT_FOUND = "Store profile not found for store_id: {store_id}"
+ERROR_GENERATE_INSIGHTS = "Failed to generate insights: {error}"
+ERROR_GENERATE_PROFILE = "Failed to generate store profile: {error}"
+
+# Logging Context Keys
+LOG_CONTEXT_STORE_ID = "store_id"
+LOG_CONTEXT_PROFILE_VERSION = "profile_version"
+LOG_CONTEXT_CONFIDENCE_SCORE = "confidence_score"
+
 @dataclass
 class StoreCharacteristics:
     """Represents the characteristics of a store."""
@@ -92,17 +131,15 @@ class StoreSimilarity:
 class StoreProfileGenerator:
     """Generator for comprehensive store profiles."""
     
-    def __init__(self, db_path: str = "search_knowledge_base.db"):
-        self.db_path = db_path
+    def __init__(self, db_path: str = DEFAULT_DB_PATH):
+        """
+        Initialize store profile generator.
         
-        # Similarity weights for store comparison
-        self.similarity_weights = {
-            "category": 0.3,
-            "price": 0.25,
-            "performance": 0.2,
-            "search": 0.15,
-            "brand": 0.1
-        }
+        Args:
+            db_path: Path to the database file
+        """
+        self.db_path = db_path
+        self.similarity_weights = SIMILARITY_WEIGHTS
     
     def generate_store_profile(self, store_id: str) -> Optional[StoreProfile]:
         """Generate a comprehensive profile for a store."""
@@ -131,7 +168,7 @@ class StoreProfileGenerator:
                 characteristics=characteristics,
                 performance_metrics=performance_metrics,
                 search_characteristics=search_characteristics,
-                profile_version="1.0",
+                profile_version=DEFAULT_PROFILE_VERSION,
                 generated_at=datetime.now(),
                 last_updated=datetime.now(),
                 confidence_score=confidence_score,
@@ -340,45 +377,111 @@ class StoreProfileGenerator:
         
         return products
     
-    def _generate_characteristics(self, store_data: List[Dict[str, Any]]) -> StoreCharacteristics:
-        """Generate store characteristics from data."""
-        if not store_data:
-            return self._create_empty_characteristics()
+    def _calculate_price_metrics(self, prices: List[float]) -> Dict[str, float]:
+        """
+        Calculate price metrics from a list of prices.
         
-        # Calculate basic metrics
-        prices = [item["price"] for item in store_data]
+        Args:
+            prices: List of prices
+            
+        Returns:
+            Dictionary with price metrics
+        """
+        if not prices:
+            return {
+                "min_price": 0.0,
+                "max_price": 0.0,
+                "avg_price": 0.0,
+                "median_price": 0.0
+            }
+        
+        return {
+            "min_price": min(prices),
+            "max_price": max(prices),
+            "avg_price": statistics.mean(prices),
+            "median_price": statistics.median(prices)
+        }
+    
+    def _calculate_distributions(self, store_data: List[Dict[str, Any]]) -> Dict[str, Dict[str, int]]:
+        """
+        Calculate distributions for various attributes.
+        
+        Args:
+            store_data: List of store data
+            
+        Returns:
+            Dictionary with distributions
+        """
+        if not store_data:
+            return {
+                "category_dist": {},
+                "brand_dist": {},
+                "material_dist": {},
+                "color_dist": {},
+                "size_dist": {}
+            }
+        
         categories = [item["category"] for item in store_data]
         brands = [item["brand"] for item in store_data]
         materials = [item["material"] for item in store_data]
         colors = [item["color"] for item in store_data]
         sizes = [item["size"] for item in store_data]
         
-        # Calculate distributions
-        category_dist = Counter(categories)
-        brand_dist = Counter(brands)
-        material_dist = Counter(materials)
-        color_dist = Counter(colors)
-        size_dist = Counter(sizes)
+        return {
+            "category_dist": dict(Counter(categories)),
+            "brand_dist": dict(Counter(brands)),
+            "material_dist": dict(Counter(materials)),
+            "color_dist": dict(Counter(colors)),
+            "size_dist": dict(Counter(sizes))
+        }
+    
+    def _calculate_seasonal_distribution(self, store_data: List[Dict[str, Any]]) -> Dict[str, int]:
+        """
+        Calculate seasonal distribution (placeholder implementation).
         
-        # Calculate price metrics
-        min_price = min(prices)
-        max_price = max(prices)
-        avg_price = statistics.mean(prices)
-        median_price = statistics.median(prices)
+        Args:
+            store_data: List of store data
+            
+        Returns:
+            Seasonal distribution
+        """
+        # Placeholder implementation - in real scenario, this would analyze
+        # product attributes, tags, or purchase patterns to determine seasonality
+        return {"spring": 25, "summer": 25, "fall": 25, "winter": 25}
+    
+    def _generate_characteristics(self, store_data: List[Dict[str, Any]]) -> StoreCharacteristics:
+        """
+        Generate store characteristics from data.
         
-        # Calculate seasonal distribution (placeholder)
-        seasonal_dist = {"spring": 25, "summer": 25, "fall": 25, "winter": 25}
+        Args:
+            store_data: List of store data
+            
+        Returns:
+            StoreCharacteristics object
+        """
+        if not store_data:
+            return self._create_empty_characteristics()
+        
+        # Calculate price metrics using helper
+        prices = [item["price"] for item in store_data]
+        price_metrics = self._calculate_price_metrics(prices)
+        
+        # Calculate distributions using helper
+        distributions = self._calculate_distributions(store_data)
+        
+        # Calculate seasonal distribution using helper
+        seasonal_dist = self._calculate_seasonal_distribution(store_data)
         
         return StoreCharacteristics(
             product_count=len(store_data),
-            price_range=(min_price, max_price),
-            average_price=avg_price,
-            median_price=median_price,
-            category_distribution=dict(category_dist),
-            brand_distribution=dict(brand_dist),
-            material_distribution=dict(material_dist),
-            color_distribution=dict(color_dist),
-            size_distribution=dict(size_dist),
+            price_range=(price_metrics["min_price"], price_metrics["max_price"]),
+            average_price=price_metrics["avg_price"],
+            median_price=price_metrics["median_price"],
+            category_distribution=distributions["category_dist"],
+            brand_distribution=distributions["brand_dist"],
+            material_distribution=distributions["material_dist"],
+            color_distribution=distributions["color_dist"],
+            size_distribution=distributions["size_dist"],
             seasonal_distribution=seasonal_dist
         )
     
@@ -720,7 +823,7 @@ class StoreProfileGenerator:
             data_quality_score=row[9]
         )
     
-    def find_similar_stores(self, target_store_id: str, limit: int = 5) -> List[StoreSimilarity]:
+    def find_similar_stores(self, target_store_id: str, limit: int = DEFAULT_SIMILARITY_LIMIT) -> List[StoreSimilarity]:
         """Find stores similar to the target store."""
         try:
             target_profile = self.get_store_profile(target_store_id)
@@ -894,6 +997,262 @@ class StoreProfileGenerator:
             json.dump(export_data, f, indent=2)
         
         return output_path
+    
+    def generate_insights(self, store_id: str) -> Dict[str, Any]:
+        """Generate actionable insights for a store."""
+        try:
+            profile = self.get_store_profile(store_id)
+            if not profile:
+                return {"error": ERROR_STORE_NOT_FOUND.format(store_id=store_id)}
+            
+            insights = {
+                "store_id": store_id,
+                "generated_at": datetime.now().isoformat(),
+                "insights": []
+            }
+            
+            # Price insights
+            insights["insights"].extend(self._generate_price_insights(profile))
+            
+            # Category insights
+            insights["insights"].extend(self._generate_category_insights(profile))
+            
+            # Performance insights
+            insights["insights"].extend(self._generate_performance_insights(profile))
+            
+            # Search behavior insights
+            insights["insights"].extend(self._generate_search_behavior_insights(profile))
+            
+            # Data quality insights
+            insights["insights"].extend(self._generate_data_quality_insights(profile))
+            
+            return insights
+            
+        except Exception as e:
+            logger.error(f"Error generating insights for store {store_id}: {e}")
+            return {
+                "error": ERROR_GENERATE_INSIGHTS.format(error=str(e)),
+                "store_id": store_id,
+                "generated_at": datetime.now().isoformat()
+            }
+
+    def _generate_price_insights(self, profile: StoreProfile) -> List[Dict[str, Any]]:
+        """
+        Generate price-related insights.
+        
+        Args:
+            profile: Store profile
+            
+        Returns:
+            List of price insights
+        """
+        insights = []
+        
+        if profile.characteristics.average_price > PRICE_SENSITIVITY_THRESHOLDS["medium"]:
+            insights.append({
+                "type": "price",
+                "category": "high_value",
+                "message": "Store has high average price - consider premium targeting",
+                "priority": "medium"
+            })
+        elif profile.characteristics.average_price < PRICE_SENSITIVITY_THRESHOLDS["low"]:
+            insights.append({
+                "type": "price",
+                "category": "budget_friendly",
+                "message": "Store has low average price - good for budget-conscious customers",
+                "priority": "low"
+            })
+        
+        return insights
+    
+    def _generate_category_insights(self, profile: StoreProfile) -> List[Dict[str, Any]]:
+        """
+        Generate category-related insights.
+        
+        Args:
+            profile: Store profile
+            
+        Returns:
+            List of category insights
+        """
+        insights = []
+        
+        top_categories = sorted(
+            profile.characteristics.category_distribution.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )[:3]
+        
+        if len(top_categories) > 0:
+            insights.append({
+                "type": "category",
+                "category": "specialization",
+                "message": f"Store specializes in: {', '.join([cat for cat, _ in top_categories])}",
+                "priority": "high"
+            })
+        
+        return insights
+    
+    def _generate_performance_insights(self, profile: StoreProfile) -> List[Dict[str, Any]]:
+        """
+        Generate performance-related insights.
+        
+        Args:
+            profile: Store profile
+            
+        Returns:
+            List of performance insights
+        """
+        insights = []
+        
+        if profile.performance_metrics.avg_search_score < PERFORMANCE_THRESHOLDS["search_score"]:
+            insights.append({
+                "type": "performance",
+                "category": "search_optimization",
+                "message": "Low search scores detected - consider improving product descriptions",
+                "priority": "high"
+            })
+        
+        if profile.performance_metrics.fallback_usage_rate > PERFORMANCE_THRESHOLDS["fallback_usage"]:
+            insights.append({
+                "type": "performance",
+                "category": "fallback_usage",
+                "message": "High fallback usage - consider expanding product catalog",
+                "priority": "medium"
+            })
+        
+        return insights
+    
+    def _generate_search_behavior_insights(self, profile: StoreProfile) -> List[Dict[str, Any]]:
+        """
+        Generate search behavior-related insights.
+        
+        Args:
+            profile: Store profile
+            
+        Returns:
+            List of search behavior insights
+        """
+        insights = []
+        
+        if profile.search_characteristics.price_sensitivity == "high":
+            insights.append({
+                "type": "search_behavior",
+                "category": "price_sensitivity",
+                "message": "Customers are price-sensitive - highlight value propositions",
+                "priority": "medium"
+            })
+        
+        return insights
+    
+    def _generate_data_quality_insights(self, profile: StoreProfile) -> List[Dict[str, Any]]:
+        """
+        Generate data quality-related insights.
+        
+        Args:
+            profile: Store profile
+            
+        Returns:
+            List of data quality insights
+        """
+        insights = []
+        
+        if profile.data_quality_score < PERFORMANCE_THRESHOLDS["data_quality"]:
+            insights.append({
+                "type": "data_quality",
+                "category": "improvement_needed",
+                "message": "Low data quality detected - consider improving product metadata",
+                "priority": "high"
+            })
+        
+        return insights
 
 # Global instance
-store_profile_generator = StoreProfileGenerator() 
+store_profile_generator = StoreProfileGenerator()
+
+# TODO: Future Improvements and Recommendations
+"""
+TODO: Future Improvements and Recommendations
+
+## 🔄 Module Opsplitsing
+- [ ] Split into separate modules:
+  - `store_characteristics.py` - Store characteristics calculation
+  - `store_performance_metrics.py` - Performance metrics calculation
+  - `store_search_characteristics.py` - Search characteristics analysis
+  - `store_similarity.py` - Store similarity calculation
+  - `store_insights.py` - Store insights generation
+  - `store_profile_orchestrator.py` - Main profile orchestration
+
+## 🗑️ Functies voor Verwijdering
+- [ ] `_generate_sample_store_data()` - Consider moving to a dedicated data generation service
+- [ ] `_generate_fashion_store_data()` - Consider moving to a dedicated data generation service
+- [ ] `_generate_tech_store_data()` - Consider moving to a dedicated data generation service
+- [ ] `_generate_sports_store_data()` - Consider moving to a dedicated data generation service
+- [ ] `_generate_general_store_data()` - Consider moving to a dedicated data generation service
+
+## ⚡ Performance Optimalisaties
+- [ ] Implement caching for frequently accessed store profiles
+- [ ] Add batch processing for multiple store profiles
+- [ ] Implement parallel processing for similarity calculations
+- [ ] Optimize database queries for large datasets
+- [ ] Add indexing for frequently queried fields
+
+## 🏗️ Architectuur Verbeteringen
+- [ ] Implement proper dependency injection
+- [ ] Add configuration management for different environments
+- [ ] Implement proper error recovery mechanisms
+- [ ] Add comprehensive unit and integration tests
+- [ ] Implement proper logging strategy with structured logging
+
+## 🔧 Code Verbeteringen
+- [ ] Add type hints for all methods
+- [ ] Implement proper error handling with custom exceptions
+- [ ] Add comprehensive docstrings for all methods
+- [ ] Implement proper validation for input parameters
+- [ ] Add proper constants for all magic numbers
+
+## 📊 Monitoring en Observability
+- [ ] Add comprehensive metrics collection
+- [ ] Implement proper distributed tracing
+- [ ] Add health checks for the service
+- [ ] Implement proper alerting mechanisms
+- [ ] Add performance monitoring
+
+## 🔒 Security Verbeteringen
+- [ ] Implement proper authentication and authorization
+- [ ] Add input validation and sanitization
+- [ ] Implement proper secrets management
+- [ ] Add audit logging for sensitive operations
+- [ ] Implement proper data encryption
+
+## 🧪 Testing Verbeteringen
+- [ ] Add unit tests for all helper methods
+- [ ] Implement integration tests for database operations
+- [ ] Add performance tests for large datasets
+- [ ] Implement proper mocking strategies
+- [ ] Add end-to-end tests for complete profile generation
+
+## 📚 Documentatie Verbeteringen
+- [ ] Add comprehensive API documentation
+- [ ] Implement proper code examples
+- [ ] Add troubleshooting guides
+- [ ] Implement proper changelog management
+- [ ] Add architecture decision records (ADRs)
+
+## 🎯 Specifieke Verbeteringen
+- [ ] Refactor large dataclasses into smaller, more focused ones
+- [ ] Implement proper error handling for database operations
+- [ ] Add retry mechanisms for failed operations
+- [ ] Implement proper caching strategies
+- [ ] Add support for different output formats
+- [ ] Implement proper progress tracking
+- [ ] Add support for custom metrics
+- [ ] Implement proper result aggregation
+- [ ] Add support for different data sources
+- [ ] Implement proper result validation
+- [ ] Add support for real-time profile updates
+- [ ] Implement proper data versioning
+- [ ] Add support for profile comparison
+- [ ] Implement proper data export functionality
+- [ ] Add support for profile templates
+""" 

@@ -14,6 +14,49 @@ import json
 
 logger = logging.getLogger(__name__)
 
+# Constants
+DEFAULT_MIN_IMPROVEMENT_THRESHOLD = 0.1  # 10% improvement required
+DEFAULT_MAX_STRATEGIES_PER_QUERY = 3     # Max strategies to try
+DEFAULT_SUCCESS_RATE = 0.8
+DEFAULT_PRIORITY = 1
+
+# Price thresholds
+PRICE_THRESHOLDS = {
+    "LOW": 50,
+    "MEDIUM": 200,
+    "HIGH": 1000
+}
+
+# Score thresholds
+SCORE_THRESHOLDS = {
+    "POOR": 0.6,
+    "FAIR": 0.7,
+    "GOOD": 0.8
+}
+
+# Result count thresholds
+RESULT_COUNT_THRESHOLDS = {
+    "LOW": 5,
+    "MEDIUM": 8,
+    "HIGH": 15
+}
+
+# Category coverage thresholds
+CATEGORY_COVERAGE_THRESHOLDS = {
+    "LOW": 0.3,
+    "MEDIUM": 0.5,
+    "HIGH": 0.7
+}
+
+# Error Messages
+ERROR_ADAPTIVE_FILTERS = "Error getting adaptive filters: {error}"
+ERROR_NO_STRATEGIES = "No adaptive filters needed"
+
+# Logging Context Keys
+LOG_CONTEXT_QUERY = "query"
+LOG_CONTEXT_STRATEGY = "strategy"
+LOG_CONTEXT_IMPROVEMENT_SCORE = "improvement_score"
+
 @dataclass
 class FilterStrategy:
     """Represents a filter strategy with conditions and actions."""
@@ -38,53 +81,70 @@ class AdaptiveFilterEngine:
     """Engine for automatically applying adaptive filters to improve search results."""
     
     def __init__(self):
+        """
+        Initialize adaptive filter engine.
+        
+        Sets up filter strategies and configuration parameters.
+        """
         self.filter_strategies = self._initialize_strategies()
-        self.min_improvement_threshold = 0.1  # 10% improvement required
-        self.max_strategies_per_query = 3     # Max strategies to try
+        self.min_improvement_threshold = DEFAULT_MIN_IMPROVEMENT_THRESHOLD
+        self.max_strategies_per_query = DEFAULT_MAX_STRATEGIES_PER_QUERY
     
-    def _initialize_strategies(self) -> List[FilterStrategy]:
-        """Initialize predefined filter strategies."""
-        strategies = [
-            # Price-based strategies
+    def _create_price_strategies(self) -> List[FilterStrategy]:
+        """
+        Create price-based filter strategies.
+        
+        Returns:
+            List of price-based strategies
+        """
+        return [
             FilterStrategy(
                 name="price_broaden_low",
                 trigger_conditions={
-                    "avg_price_top5": {"min": 0, "max": 50},
-                    "result_count": {"min": 0, "max": 5},
-                    "score": {"min": 0, "max": 0.6}
+                    "avg_price_top5": {"min": 0, "max": PRICE_THRESHOLDS["LOW"]},
+                    "result_count": {"min": 0, "max": RESULT_COUNT_THRESHOLDS["LOW"]},
+                    "score": {"min": 0, "max": SCORE_THRESHOLDS["POOR"]}
                 },
                 filter_actions={
                     "price_range": {"min": 0, "max": 100},
                     "broaden_search": True
                 },
-                priority=1,
-                success_rate=0.8,
+                priority=DEFAULT_PRIORITY,
+                success_rate=DEFAULT_SUCCESS_RATE,
                 usage_count=0
             ),
             
             FilterStrategy(
                 name="price_broaden_high",
                 trigger_conditions={
-                    "avg_price_top5": {"min": 200, "max": 1000},
-                    "result_count": {"min": 0, "max": 5},
-                    "score": {"min": 0, "max": 0.6}
+                    "avg_price_top5": {"min": PRICE_THRESHOLDS["MEDIUM"], "max": PRICE_THRESHOLDS["HIGH"]},
+                    "result_count": {"min": 0, "max": RESULT_COUNT_THRESHOLDS["LOW"]},
+                    "score": {"min": 0, "max": SCORE_THRESHOLDS["POOR"]}
                 },
                 filter_actions={
                     "price_range": {"min": 150, "max": 500},
                     "broaden_search": True
                 },
-                priority=1,
+                priority=DEFAULT_PRIORITY,
                 success_rate=0.75,
                 usage_count=0
-            ),
-            
-            # Category-based strategies
+            )
+        ]
+    
+    def _create_category_strategies(self) -> List[FilterStrategy]:
+        """
+        Create category-based filter strategies.
+        
+        Returns:
+            List of category-based strategies
+        """
+        return [
             FilterStrategy(
                 name="category_broaden",
                 trigger_conditions={
-                    "category_coverage": {"min": 0, "max": 0.3},
-                    "result_count": {"min": 0, "max": 8},
-                    "score": {"min": 0, "max": 0.7}
+                    "category_coverage": {"min": 0, "max": CATEGORY_COVERAGE_THRESHOLDS["LOW"]},
+                    "result_count": {"min": 0, "max": RESULT_COUNT_THRESHOLDS["MEDIUM"]},
+                    "score": {"min": 0, "max": SCORE_THRESHOLDS["FAIR"]}
                 },
                 filter_actions={
                     "category_expansion": True,
@@ -93,82 +153,66 @@ class AdaptiveFilterEngine:
                 priority=2,
                 success_rate=0.7,
                 usage_count=0
-            ),
-            
-            # Diversity-based strategies
+            )
+        ]
+    
+    def _create_diversity_strategies(self) -> List[FilterStrategy]:
+        """
+        Create diversity-based filter strategies.
+        
+        Returns:
+            List of diversity-based strategies
+        """
+        return [
             FilterStrategy(
                 name="diversity_improve",
                 trigger_conditions={
                     "diversity_score": {"min": 0, "max": 0.4},
-                    "result_count": {"min": 5, "max": 25},
-                    "score": {"min": 0, "max": 0.8}
+                    "result_count": {"min": 5, "max": 20},
+                    "score": {"min": 0, "max": SCORE_THRESHOLDS["FAIR"]}
                 },
                 filter_actions={
                     "force_diversity": True,
-                    "max_similar_results": 3
+                    "max_similar_items": 3
                 },
                 priority=3,
                 success_rate=0.65,
                 usage_count=0
-            ),
-            
-            # Material-based strategies
-            FilterStrategy(
-                name="material_fallback",
-                trigger_conditions={
-                    "material_intent_detected": True,
-                    "result_count": {"min": 0, "max": 3},
-                    "score": {"min": 0, "max": 0.5}
-                },
-                filter_actions={
-                    "material_fallback": True,
-                    "include_similar_materials": True
-                },
-                priority=2,
-                success_rate=0.7,
-                usage_count=0
-            ),
-            
-            # Color-based strategies
-            FilterStrategy(
-                name="color_fallback",
-                trigger_conditions={
-                    "color_intent_detected": True,
-                    "result_count": {"min": 0, "max": 3},
-                    "score": {"min": 0, "max": 0.5}
-                },
-                filter_actions={
-                    "color_fallback": True,
-                    "include_neutral_colors": True
-                },
-                priority=2,
-                success_rate=0.7,
-                usage_count=0
-            ),
-            
-            # Emergency fallback strategy
-            FilterStrategy(
-                name="emergency_fallback",
-                trigger_conditions={
-                    "result_count": {"min": 0, "max": 2},
-                    "score": {"min": 0, "max": 0.3}
-                },
-                filter_actions={
-                    "remove_all_filters": True,
-                    "broaden_search": True,
-                    "include_all_categories": True
-                },
-                priority=0,  # Highest priority
-                success_rate=0.9,
-                usage_count=0
             )
         ]
+    
+    def _initialize_strategies(self) -> List[FilterStrategy]:
+        """
+        Initialize predefined filter strategies.
+        
+        Returns:
+            List of filter strategies
+        """
+        strategies = []
+        
+        # Add price-based strategies
+        strategies.extend(self._create_price_strategies())
+        
+        # Add category-based strategies
+        strategies.extend(self._create_category_strategies())
+        
+        # Add diversity-based strategies
+        strategies.extend(self._create_diversity_strategies())
         
         return strategies
     
     def analyze_search_performance(self, results: List[Dict[str, Any]], 
                                  query_analysis: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze search performance to determine if adaptive filtering is needed."""
+        """
+        Analyze search performance to determine if adaptive filtering is needed.
+        
+        Args:
+            results: Search results
+            query_analysis: Query analysis data
+            
+        Returns:
+            Dictionary with performance analysis
+        """
         if not results:
             return {
                 "needs_improvement": True,
@@ -176,31 +220,11 @@ class AdaptiveFilterEngine:
                 "metrics": {}
             }
         
-        # Calculate performance metrics
-        scores = [r.get('similarity', 0) for r in results]
-        prices = [r.get('price', 0) for r in results if r.get('price')]
+        # Calculate performance metrics using helper
+        metrics = self._calculate_performance_metrics(results, query_analysis)
         
-        metrics = {
-            "avg_score": statistics.mean(scores) if scores else 0,
-            "result_count": len(results),
-            "avg_price_top5": statistics.mean(prices[:5]) if prices else 0,
-            "price_range": max(prices) - min(prices) if len(prices) > 1 else 0,
-            "category_coverage": self._calculate_category_coverage(results),
-            "diversity_score": self._calculate_diversity_score(results),
-            "material_intent_detected": "material_intent" in query_analysis.get("detected_intents", {}),
-            "color_intent_detected": "color_intent" in query_analysis.get("detected_intents", {})
-        }
-        
-        # Identify issues
-        issues = []
-        if metrics["avg_score"] < 0.6:
-            issues.append("low_relevance")
-        if metrics["result_count"] < 5:
-            issues.append("insufficient_results")
-        if metrics["category_coverage"] < 0.3:
-            issues.append("low_category_coverage")
-        if metrics["diversity_score"] < 0.4:
-            issues.append("low_diversity")
+        # Identify issues using helper
+        issues = self._identify_performance_issues(metrics)
         
         needs_improvement = len(issues) > 0
         
@@ -522,6 +546,204 @@ class AdaptiveFilterEngine:
             })
         
         return stats
+    
+    def get_adaptive_filters(self, query: str, current_results: List[Dict[str, Any]], 
+                           search_service) -> Dict[str, Any]:
+        """Get adaptive filters for the current search context."""
+        try:
+            # Analyze current search performance
+            query_analysis = {
+                "query": query,
+                "result_count": len(current_results),
+                "has_price_intent": self._has_price_intent(query),
+                "has_category_intent": self._has_category_intent(query)
+            }
+            
+            performance_analysis = self.analyze_search_performance(current_results, query_analysis)
+            
+            # Select appropriate strategies
+            strategies = self.select_adaptive_strategies(performance_analysis)
+            
+            # Apply adaptive filtering
+            if strategies:
+                result = self.apply_adaptive_filters(current_results, query_analysis, search_service)
+                return {
+                    "filters_applied": result.filters_applied,
+                    "improvement_score": result.improvement_score,
+                    "strategies_used": result.applied_strategies,
+                    "reasoning": result.reasoning
+                }
+            
+            return {
+                "filters_applied": {},
+                "improvement_score": 0.0,
+                "strategies_used": [],
+                "reasoning": ERROR_NO_STRATEGIES.format(error=ERROR_NO_STRATEGIES)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting adaptive filters: {e}")
+            return {
+                "filters_applied": {},
+                "improvement_score": 0.0,
+                "strategies_used": [],
+                "reasoning": ERROR_ADAPTIVE_FILTERS.format(error=str(e))
+            }
+    
+    def _has_price_intent(self, query: str) -> bool:
+        """Check if query has price intent."""
+        price_keywords = ['euro', '€', 'prijs', 'price', 'onder', 'boven', 'tussen', 'max', 'min']
+        return any(keyword in query.lower() for keyword in price_keywords)
+    
+    def _has_category_intent(self, query: str) -> bool:
+        """Check if query has category intent."""
+        category_keywords = ['categorie', 'category', 'type', 'soort', 'kleding', 'elektronica']
+        return any(keyword in query.lower() for keyword in category_keywords)
+
+    def _calculate_performance_metrics(self, results: List[Dict[str, Any]], query_analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Calculate performance metrics for search results.
+        
+        Args:
+            results: Search results
+            query_analysis: Query analysis data
+            
+        Returns:
+            Dictionary with performance metrics
+        """
+        if not results:
+            return {}
+        
+        scores = [r.get('similarity', 0) for r in results]
+        prices = [r.get('price', 0) for r in results if r.get('price')]
+        
+        return {
+            "avg_score": statistics.mean(scores) if scores else 0,
+            "result_count": len(results),
+            "avg_price_top5": statistics.mean(prices[:5]) if prices else 0,
+            "price_range": max(prices) - min(prices) if len(prices) > 1 else 0,
+            "category_coverage": self._calculate_category_coverage(results),
+            "diversity_score": self._calculate_diversity_score(results),
+            "material_intent_detected": "material_intent" in query_analysis.get("detected_intents", {}),
+            "color_intent_detected": "color_intent" in query_analysis.get("detected_intents", {})
+        }
+    
+    def _identify_performance_issues(self, metrics: Dict[str, Any]) -> List[str]:
+        """
+        Identify performance issues based on metrics.
+        
+        Args:
+            metrics: Performance metrics
+            
+        Returns:
+            List of identified issues
+        """
+        issues = []
+        
+        if metrics.get("avg_score", 0) < SCORE_THRESHOLDS["POOR"]:
+            issues.append("low_relevance")
+        
+        if metrics.get("result_count", 0) < RESULT_COUNT_THRESHOLDS["LOW"]:
+            issues.append("insufficient_results")
+        
+        if metrics.get("category_coverage", 0) < CATEGORY_COVERAGE_THRESHOLDS["LOW"]:
+            issues.append("low_category_coverage")
+        
+        if metrics.get("diversity_score", 0) < 0.4:
+            issues.append("low_diversity")
+        
+        return issues
 
 # Global instance
-adaptive_filter_engine = AdaptiveFilterEngine() 
+adaptive_filter_engine = AdaptiveFilterEngine()
+
+# TODO: Future Improvements and Recommendations
+"""
+TODO: Future Improvements and Recommendations
+
+## 🔄 Module Opsplitsing
+- [ ] Split into separate modules:
+  - `filter_strategies.py` - Filter strategy definitions and management
+  - `performance_analyzer.py` - Performance analysis and metrics calculation
+  - `strategy_selector.py` - Strategy selection and application logic
+  - `filter_applicator.py` - Filter application and result improvement
+  - `adaptive_filter_types.py` - Filter types and result classes
+  - `adaptive_filter_orchestrator.py` - Main adaptive filter orchestration
+
+## 🗑️ Functies voor Verwijdering
+- [ ] `_initialize_strategies()` - Consider moving to a dedicated strategy service
+- [ ] `get_strategy_statistics()` - Consider moving to a dedicated statistics service
+- [ ] `_has_price_intent()` - Consider moving to a dedicated intent detection service
+- [ ] `_has_category_intent()` - Consider moving to a dedicated intent detection service
+
+## ⚡ Performance Optimalisaties
+- [ ] Implement caching for frequently used strategies
+- [ ] Add batch processing for multiple filter applications
+- [ ] Implement parallel processing for strategy evaluation
+- [ ] Optimize strategy selection for large datasets
+- [ ] Add indexing for frequently accessed patterns
+
+## 🏗️ Architectuur Verbeteringen
+- [ ] Implement proper dependency injection
+- [ ] Add configuration management for different environments
+- [ ] Implement proper error recovery mechanisms
+- [ ] Add comprehensive unit and integration tests
+- [ ] Implement proper logging strategy with structured logging
+
+## 🔧 Code Verbeteringen
+- [ ] Add type hints for all methods
+- [ ] Implement proper error handling with custom exceptions
+- [ ] Add comprehensive docstrings for all methods
+- [ ] Implement proper validation for input parameters
+- [ ] Add proper constants for all magic numbers
+
+## 📊 Monitoring en Observability
+- [ ] Add comprehensive metrics collection
+- [ ] Implement proper distributed tracing
+- [ ] Add health checks for the service
+- [ ] Implement proper alerting mechanisms
+- [ ] Add performance monitoring
+
+## 🔒 Security Verbeteringen
+- [ ] Implement proper authentication and authorization
+- [ ] Add input validation and sanitization
+- [ ] Implement proper secrets management
+- [ ] Add audit logging for sensitive operations
+- [ ] Implement proper data encryption
+
+## 🧪 Testing Verbeteringen
+- [ ] Add unit tests for all helper methods
+- [ ] Implement integration tests for strategy application
+- [ ] Add performance tests for large datasets
+- [ ] Implement proper mocking strategies
+- [ ] Add end-to-end tests for complete adaptive filtering
+
+## 📚 Documentatie Verbeteringen
+- [ ] Add comprehensive API documentation
+- [ ] Implement proper code examples
+- [ ] Add troubleshooting guides
+- [ ] Implement proper changelog management
+- [ ] Add architecture decision records (ADRs)
+
+## 🎯 Specifieke Verbeteringen
+- [ ] Refactor large strategy initialization methods into smaller, more focused ones
+- [ ] Implement proper error handling for strategy application
+- [ ] Add retry mechanisms for failed operations
+- [ ] Implement proper caching strategies
+- [ ] Add support for different output formats
+- [ ] Implement proper progress tracking
+- [ ] Add support for custom strategies
+- [ ] Implement proper result aggregation
+- [ ] Add support for different data sources
+- [ ] Implement proper result validation
+- [ ] Add support for real-time strategy updates
+- [ ] Implement proper data versioning
+- [ ] Add support for strategy comparison
+- [ ] Implement proper data export functionality
+- [ ] Add support for strategy templates
+- [ ] Implement proper A/B testing for strategies
+- [ ] Add support for personalized strategies
+- [ ] Implement proper feedback collection
+- [ ] Add support for strategy analytics
+- [ ] Implement proper strategy ranking
+""" 

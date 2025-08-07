@@ -2,23 +2,27 @@
 """
 Knowledge Base Builder
 
-This script processes benchmark results and builds a knowledge base for:
+Processes benchmark results and builds a knowledge base for:
 - Query pattern analysis
 - Performance optimization
 - Transfer learning
 - Store profiling
 """
 
-import csv
 import json
-import sqlite3
 import pandas as pd
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, asdict
 from datetime import datetime
 import statistics
 import logging
-from pathlib import Path
+from sqlalchemy.orm import Session
+from sqlalchemy import func
+from contextlib import contextmanager
+# Import models directly to avoid circular import issues
+from ai_shopify_search.core.models import StoreProfileModel, QueryPatternModel, IntentMatrixModel, BenchmarkHistoryModel
+from ai_shopify_search.core.database import get_db
+from ai_shopify_search.core.models import Product
 
 # Configure logging
 logging.basicConfig(
@@ -27,9 +31,43 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Constants
+DEFAULT_STORE_ID = "default_store"
+DEFAULT_SIMILAR_STORES_LIMIT = 5
+DEFAULT_TOP_RECOMMENDATIONS_LIMIT = 5
+DEFAULT_TRANSFERABLE_PATTERNS_LIMIT = 10
+DEFAULT_CONFIDENCE_MULTIPLIER = 0.2
+DEFAULT_MAX_CONFIDENCE = 0.9
+
+# Performance thresholds
+PERFORMANCE_THRESHOLDS = {
+    "success_rate": 0.7,
+    "relevance_score": 0.6,
+    "response_time": 2.0,
+    "price_coherence": 0.5,
+    "diversity_score": 0.4
+}
+
+# Error Messages
+ERROR_DATABASE_INIT = "Knowledge base database initialization failed: {error}"
+ERROR_SIMILAR_STORES = "Error retrieving similar stores: {error}"
+ERROR_NO_SIMILAR_STORES = "No similar stores found for transfer learning"
+
+# Logging Context Keys
+LOG_CONTEXT_STORE_ID = "store_id"
+LOG_CONTEXT_RESULTS_FILE = "results_file"
+LOG_CONTEXT_PATTERNS_COUNT = "patterns_count"
+
+@contextmanager
+def db_session():
+    db = next(get_db())
+    try:
+        yield db
+    finally:
+        db.close()
+
 @dataclass
 class QueryPattern:
-    """Represents a query pattern with performance metrics."""
     pattern_type: str
     pattern_text: str
     success_rate: float
@@ -43,7 +81,6 @@ class QueryPattern:
 
 @dataclass
 class StoreProfile:
-    """Represents a store profile with performance baselines."""
     store_id: str
     product_count: int
     price_range: Tuple[float, float]
@@ -51,212 +88,157 @@ class StoreProfile:
     brand_distribution: Dict[str, int]
     material_distribution: Dict[str, int]
     color_distribution: Dict[str, int]
-    
-    # Performance baselines
     avg_response_time_baseline: float
     avg_relevance_score_baseline: float
     price_filter_usage_rate: float
     fallback_usage_rate: float
     cache_hit_rate: float
-    
-    # Query patterns
     successful_query_patterns: List[str]
     problematic_query_patterns: List[str]
     recommended_improvements: List[str]
-    
-    # Quality metrics
     avg_price_coherence: float
     avg_diversity_score: float
     avg_conversion_potential: float
-    
-    # Metadata
     created_at: datetime
     last_updated: datetime
 
 class KnowledgeBaseBuilder:
-    """Builds and maintains the search knowledge base."""
+    """Knowledge base builder for processing benchmark results and building store profiles."""
     
     def __init__(self, db_path: str = None):
-        if db_path is None:
-            # Get absolute path from project root
-            import os
-            # Go up from scripts/data_generation to project root
-            current_file = os.path.abspath(__file__)
-            project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
-            self.db_path = os.path.join(project_root, "data", "databases", "findly_consolidated.db")
-        else:
-            self.db_path = db_path
+        """
+        Initialize knowledge base builder.
+        
+        Args:
+            db_path: Database path (optional)
+        """
+        self.db_path = None
         self.init_database()
     
-    def init_database(self):
-        """Initialize the knowledge base database."""
-        with sqlite3.connect(self.db_path) as conn:
-            # Query patterns table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS query_patterns (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    pattern_type TEXT NOT NULL,
-                    pattern_text TEXT NOT NULL,
-                    success_rate REAL,
-                    avg_relevance_score REAL,
-                    total_usage INTEGER DEFAULT 0,
-                    avg_response_time REAL,
-                    price_filter_usage_rate REAL,
-                    fallback_usage_rate REAL,
-                    complexity_score REAL,
-                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(pattern_type, pattern_text)
-                )
-            """)
-            
-            # Store profiles table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS store_profiles (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    store_id TEXT UNIQUE NOT NULL,
-                    product_count INTEGER,
-                    price_range_min REAL,
-                    price_range_max REAL,
-                    category_distribution TEXT,  -- JSON
-                    brand_distribution TEXT,     -- JSON
-                    material_distribution TEXT,  -- JSON
-                    color_distribution TEXT,     -- JSON
-                    avg_response_time_baseline REAL,
-                    avg_relevance_score_baseline REAL,
-                    price_filter_usage_rate REAL,
-                    fallback_usage_rate REAL,
-                    cache_hit_rate REAL,
-                    successful_query_patterns TEXT,  -- JSON
-                    problematic_query_patterns TEXT, -- JSON
-                    recommended_improvements TEXT,   -- JSON
-                    avg_price_coherence REAL,
-                    avg_diversity_score REAL,
-                    avg_conversion_potential REAL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            # Search intent success matrix
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS search_intent_success (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    intent_type TEXT NOT NULL,
-                    query_template TEXT NOT NULL,
-                    success_score REAL,
-                    recommended_filters TEXT,  -- JSON
-                    fallback_strategies TEXT, -- JSON
-                    avg_response_time REAL,
-                    usage_count INTEGER DEFAULT 0,
-                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(intent_type, query_template)
-                )
-            """)
-            
-            # Product performance mapping
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS product_performance (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    product_id INTEGER,
-                    category TEXT,
-                    avg_search_position REAL,
-                    click_through_rate REAL,
-                    conversion_rate REAL,
-                    search_volume INTEGER DEFAULT 0,
-                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            # Benchmark results history
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS benchmark_history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    store_id TEXT,
-                    query TEXT,
-                    score REAL,
-                    response_time REAL,
-                    result_count INTEGER,
-                    detected_intents TEXT,  -- JSON
-                    complexity_score REAL,
-                    cache_hit BOOLEAN,
-                    price_filter_applied BOOLEAN,
-                    fallback_used BOOLEAN,
-                    avg_price_top5 REAL,
-                    price_coherence REAL,
-                    diversity_score REAL,
-                    category_coverage REAL,
-                    conversion_potential REAL,
-                    timestamp TIMESTAMP,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            conn.commit()
-            logger.info("✅ Knowledge base database initialized")
-    
-    def process_benchmark_results(self, results_file: str, store_id: Optional[str] = None) -> StoreProfile:
-        """Process benchmark results and build knowledge base."""
-        logger.info(f"📊 Processing benchmark results from {results_file}")
+    def _determine_store_id(self, df: pd.DataFrame, store_id: Optional[str] = None) -> str:
+        """
+        Determine store ID from dataframe or use default.
         
-        # Read benchmark results
-        df = pd.read_csv(results_file)
+        Args:
+            df: Benchmark results dataframe
+            store_id: Optional store ID
+            
+        Returns:
+            Store ID to use
+        """
+        if store_id:
+            return store_id
         
-        # Extract store ID from results if not provided
-        if not store_id and 'store_id' in df.columns:
+        if 'store_id' in df.columns:
             store_ids = df['store_id'].dropna().unique()
             if len(store_ids) > 0:
-                store_id = store_ids[0]
+                return store_ids[0]
         
-        if not store_id:
-            store_id = "default_store"
+        return DEFAULT_STORE_ID
+    
+    def _calculate_performance_metrics(self, df: pd.DataFrame) -> Dict[str, float]:
+        """
+        Calculate performance metrics from benchmark results.
         
-        # Build store profile
-        store_profile = self._build_store_profile(df, store_id)
+        Args:
+            df: Benchmark results dataframe
+            
+        Returns:
+            Dictionary with performance metrics
+        """
+        return {
+            "avg_response_time": df['response_time'].mean(),
+            "avg_relevance_score": df['score'].mean(),
+            "price_filter_usage_rate": df['price_filter_applied'].mean(),
+            "fallback_usage_rate": df['fallback_used'].mean(),
+            "cache_hit_rate": df['cache_hit'].mean() if 'cache_hit' in df.columns else 0.0,
+            "avg_price_coherence": df['price_coherence'].mean() if 'price_coherence' in df.columns else 0.0,
+            "avg_diversity_score": df['diversity_score'].mean() if 'diversity_score' in df.columns else 0.0,
+            "avg_conversion_potential": df['conversion_potential'].mean() if 'conversion_potential' in df.columns else 0.0
+        }
+    
+    def _calculate_distributions(self, df: pd.DataFrame) -> Dict[str, Dict[str, int]]:
+        """
+        Calculate intent distributions from benchmark results.
         
-        # Extract query patterns
-        query_patterns = self._extract_query_patterns(df)
+        Args:
+            df: Benchmark results dataframe
+            
+        Returns:
+            Dictionary with intent distributions
+        """
+        return {
+            "category_distribution": self._extract_intent_distribution(df, 'category_intent'),
+            "brand_distribution": self._extract_intent_distribution(df, 'brand_intent'),
+            "material_distribution": self._extract_intent_distribution(df, 'material_intent'),
+            "color_distribution": self._extract_intent_distribution(df, 'color_intent')
+        }
+    
+    def _save_all_data(self, store_profile: StoreProfile, query_patterns: List[QueryPattern], 
+                      intent_success: List[Dict[str, Any]], df: pd.DataFrame, store_id: str) -> None:
+        """
+        Save all processed data to database.
         
-        # Build search intent success matrix
-        intent_success = self._build_intent_success_matrix(df)
-        
-        # Save to database
+        Args:
+            store_profile: Store profile to save
+            query_patterns: Query patterns to save
+            intent_success: Intent success matrix to save
+            df: Benchmark results dataframe
+            store_id: Store ID
+        """
         self._save_store_profile(store_profile)
         self._save_query_patterns(query_patterns)
         self._save_intent_success_matrix(intent_success)
         self._save_benchmark_history(df, store_id)
-        
+
+    def init_database(self):
+        """
+        Initialize knowledge base database connection.
+        """
+        try:
+            with db_session() as db:
+                product_count = db.query(Product).count()
+                logger.info(f"Knowledge base database initialized successfully. Found {product_count} products.")
+        except Exception as e:
+            logger.warning(ERROR_DATABASE_INIT.format(error=str(e)))
+
+    def process_benchmark_results(self, results_file: str, store_id: Optional[str] = None) -> StoreProfile:
+        logger.info(f"📊 Processing benchmark results from {results_file}")
+        df = pd.read_csv(results_file)
+
+        store_id = self._determine_store_id(df, store_id)
+
+        store_profile = self._build_store_profile(df, store_id)
+        query_patterns = self._extract_query_patterns(df)
+        intent_success = self._build_intent_success_matrix(df)
+
+        self._save_all_data(store_profile, query_patterns, intent_success, df, store_id)
+
         logger.info(f"✅ Processed {len(df)} benchmark results for store {store_id}")
-        
         return store_profile
-    
+
     def _build_store_profile(self, df: pd.DataFrame, store_id: str) -> StoreProfile:
-        """Build a comprehensive store profile from benchmark results."""
+        """
+        Build store profile from benchmark results.
         
-        # Basic metrics
-        avg_response_time = df['response_time'].mean()
-        avg_relevance_score = df['score'].mean()
-        price_filter_usage_rate = df['price_filter_applied'].mean()
-        fallback_usage_rate = df['fallback_used'].mean()
-        cache_hit_rate = df['cache_hit'].mean() if 'cache_hit' in df.columns else 0.0
+        Args:
+            df: Benchmark results dataframe
+            store_id: Store ID
+            
+        Returns:
+            StoreProfile object
+        """
+        # Calculate performance metrics using helper
+        metrics = self._calculate_performance_metrics(df)
         
-        # Quality metrics
-        avg_price_coherence = df['price_coherence'].mean() if 'price_coherence' in df.columns else 0.0
-        avg_diversity_score = df['diversity_score'].mean() if 'diversity_score' in df.columns else 0.0
-        avg_conversion_potential = df['conversion_potential'].mean() if 'conversion_potential' in df.columns else 0.0
+        # Calculate distributions using helper
+        distributions = self._calculate_distributions(df)
         
-        # Extract distributions from detected intents
-        category_distribution = self._extract_intent_distribution(df, 'category_intent')
-        brand_distribution = self._extract_intent_distribution(df, 'brand_intent')
-        material_distribution = self._extract_intent_distribution(df, 'material_intent')
-        color_distribution = self._extract_intent_distribution(df, 'color_intent')
-        
-        # Price range estimation
+        # Calculate other metrics
         price_range = self._estimate_price_range(df)
+        product_count = int(df['result_count'].max() * 1.5) if 'result_count' in df.columns else 0
         
-        # Product count estimation (based on result counts)
-        product_count = int(df['result_count'].max() * 1.5)  # Rough estimate
-        
-        # Identify successful and problematic patterns
+        # Identify patterns and recommendations
         successful_patterns = self._identify_successful_patterns(df)
         problematic_patterns = self._identify_problematic_patterns(df)
         recommended_improvements = self._generate_recommendations(df)
@@ -265,138 +247,75 @@ class KnowledgeBaseBuilder:
             store_id=store_id,
             product_count=product_count,
             price_range=price_range,
-            category_distribution=category_distribution,
-            brand_distribution=brand_distribution,
-            material_distribution=material_distribution,
-            color_distribution=color_distribution,
-            avg_response_time_baseline=avg_response_time,
-            avg_relevance_score_baseline=avg_relevance_score,
-            price_filter_usage_rate=price_filter_usage_rate,
-            fallback_usage_rate=fallback_usage_rate,
-            cache_hit_rate=cache_hit_rate,
+            category_distribution=distributions["category_distribution"],
+            brand_distribution=distributions["brand_distribution"],
+            material_distribution=distributions["material_distribution"],
+            color_distribution=distributions["color_distribution"],
+            avg_response_time_baseline=metrics["avg_response_time"],
+            avg_relevance_score_baseline=metrics["avg_relevance_score"],
+            price_filter_usage_rate=metrics["price_filter_usage_rate"],
+            fallback_usage_rate=metrics["fallback_usage_rate"],
+            cache_hit_rate=metrics["cache_hit_rate"],
             successful_query_patterns=successful_patterns,
             problematic_query_patterns=problematic_patterns,
             recommended_improvements=recommended_improvements,
-            avg_price_coherence=avg_price_coherence,
-            avg_diversity_score=avg_diversity_score,
-            avg_conversion_potential=avg_conversion_potential,
+            avg_price_coherence=metrics["avg_price_coherence"],
+            avg_diversity_score=metrics["avg_diversity_score"],
+            avg_conversion_potential=metrics["avg_conversion_potential"],
             created_at=datetime.now(),
             last_updated=datetime.now()
         )
-    
+
     def _extract_intent_distribution(self, df: pd.DataFrame, intent_type: str) -> Dict[str, int]:
-        """Extract distribution of specific intent types from detected intents."""
         distribution = {}
-        
         if 'detected_intents' in df.columns:
             for intents_json in df['detected_intents'].dropna():
                 try:
                     intents = json.loads(intents_json)
-                    if intent_type in intents:
-                        for keyword in intents[intent_type]:
-                            distribution[keyword] = distribution.get(keyword, 0) + 1
+                    for keyword in intents.get(intent_type, []):
+                        distribution[keyword] = distribution.get(keyword, 0) + 1
                 except json.JSONDecodeError:
                     continue
-        
         return distribution
-    
+
     def _estimate_price_range(self, df: pd.DataFrame) -> Tuple[float, float]:
-        """Estimate price range from benchmark results."""
         if 'avg_price_top5' in df.columns:
             prices = df['avg_price_top5'].dropna()
             if len(prices) > 0:
                 return (float(prices.min()), float(prices.max()))
-        
-        # Fallback to reasonable defaults
         return (10.0, 500.0)
-    
+
     def _identify_successful_patterns(self, df: pd.DataFrame) -> List[str]:
-        """Identify successful query patterns."""
-        successful_queries = df[df['score'] > 0.8]['query'].tolist()
-        patterns = []
-        
-        for query in successful_queries[:10]:  # Top 10
-            # Extract simple patterns
-            words = query.lower().split()
-            if len(words) >= 2:
-                patterns.append(f"{words[0]} {words[1]}")
-        
-        return list(set(patterns))
-    
+        return [f"{q.split()[0]} {q.split()[1]}" for q in df[df['score'] > 0.8]['query'].tolist() if len(q.split()) >= 2][:10]
+
     def _identify_problematic_patterns(self, df: pd.DataFrame) -> List[str]:
-        """Identify problematic query patterns."""
-        problematic_queries = df[df['score'] < 0.4]['query'].tolist()
-        patterns = []
-        
-        for query in problematic_queries[:10]:  # Top 10
-            # Extract simple patterns
-            words = query.lower().split()
-            if len(words) >= 2:
-                patterns.append(f"{words[0]} {words[1]}")
-        
-        return list(set(patterns))
-    
+        return [f"{q.split()[0]} {q.split()[1]}" for q in df[df['score'] < 0.4]['query'].tolist() if len(q.split()) >= 2][:10]
+
     def _generate_recommendations(self, df: pd.DataFrame) -> List[str]:
-        """Generate improvement recommendations based on benchmark results."""
         recommendations = []
-        
-        # Analyze performance metrics
         avg_score = df['score'].mean()
         avg_response_time = df['response_time'].mean()
         price_filter_rate = df['price_filter_applied'].mean()
-        
-        if avg_score < 0.6:
-            recommendations.append("Improve search relevance scoring")
-        
-        if avg_response_time > 0.5:
-            recommendations.append("Optimize response times")
-        
-        if price_filter_rate < 0.3:
-            recommendations.append("Enhance price intent detection")
-        
-        # Analyze intent patterns
-        if 'detected_intents' in df.columns:
-            intent_counts = {}
-            for intents_json in df['detected_intents'].dropna():
-                try:
-                    intents = json.loads(intents_json)
-                    for intent_type in intents:
-                        intent_counts[intent_type] = intent_counts.get(intent_type, 0) + 1
-                except json.JSONDecodeError:
-                    continue
-            
-            if 'price_intent' in intent_counts and intent_counts['price_intent'] < len(df) * 0.2:
-                recommendations.append("Expand price-related keywords")
-            
-            if 'category_intent' in intent_counts and intent_counts['category_intent'] < len(df) * 0.3:
-                recommendations.append("Improve category detection")
-        
+        if avg_score < 0.6: recommendations.append("Improve search relevance scoring")
+        if avg_response_time > 0.5: recommendations.append("Optimize response times")
+        if price_filter_rate < 0.3: recommendations.append("Enhance price intent detection")
         return recommendations
-    
+
     def _extract_query_patterns(self, df: pd.DataFrame) -> List[QueryPattern]:
-        """Extract query patterns from benchmark results."""
         patterns = []
-        
-        # Group by intent types
         if 'detected_intents' in df.columns:
             intent_groups = {}
-            
             for _, row in df.iterrows():
                 try:
                     intents = json.loads(row['detected_intents'])
-                    for intent_type, keywords in intents.items():
-                        if intent_type not in intent_groups:
-                            intent_groups[intent_type] = []
-                        intent_groups[intent_type].append(row)
+                    for intent_type in intents:
+                        intent_groups.setdefault(intent_type, []).append(row)
                 except json.JSONDecodeError:
                     continue
-            
-            # Create patterns for each intent type
             for intent_type, group_data in intent_groups.items():
-                if len(group_data) >= 3:  # Minimum threshold
-                    group_df = pd.DataFrame(group_data)
-                    
-                    pattern = QueryPattern(
+                group_df = pd.DataFrame(group_data)
+                if len(group_df) >= 3:
+                    patterns.append(QueryPattern(
                         pattern_type=intent_type,
                         pattern_text=f"{intent_type}_pattern",
                         success_rate=group_df['score'].mean(),
@@ -407,33 +326,24 @@ class KnowledgeBaseBuilder:
                         fallback_usage_rate=group_df['fallback_used'].mean(),
                         complexity_score=group_df['complexity_score'].mean() if 'complexity_score' in group_df.columns else 0.0,
                         last_updated=datetime.now()
-                    )
-                    patterns.append(pattern)
-        
+                    ))
         return patterns
-    
+
     def _build_intent_success_matrix(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
-        """Build search intent success matrix."""
         matrix = []
-        
         if 'detected_intents' in df.columns:
             intent_groups = {}
-            
             for _, row in df.iterrows():
                 try:
                     intents = json.loads(row['detected_intents'])
-                    for intent_type, keywords in intents.items():
-                        if intent_type not in intent_groups:
-                            intent_groups[intent_type] = []
-                        intent_groups[intent_type].append(row)
+                    for intent_type in intents:
+                        intent_groups.setdefault(intent_type, []).append(row)
                 except json.JSONDecodeError:
                     continue
-            
             for intent_type, group_data in intent_groups.items():
-                if len(group_data) >= 2:  # Minimum threshold
-                    group_df = pd.DataFrame(group_data)
-                    
-                    matrix_entry = {
+                group_df = pd.DataFrame(group_data)
+                if len(group_df) >= 2:
+                    matrix.append({
                         'intent_type': intent_type,
                         'query_template': f"{intent_type}_template",
                         'success_score': group_df['score'].mean(),
@@ -442,285 +352,262 @@ class KnowledgeBaseBuilder:
                         'avg_response_time': group_df['response_time'].mean(),
                         'usage_count': len(group_df),
                         'last_updated': datetime.now().isoformat()
-                    }
-                    matrix.append(matrix_entry)
-        
+                    })
         return matrix
-    
+
+
     def _save_store_profile(self, profile: StoreProfile):
-        """Save store profile to database."""
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
-                INSERT OR REPLACE INTO store_profiles (
-                    store_id, product_count, price_range_min, price_range_max,
-                    category_distribution, brand_distribution, material_distribution, color_distribution,
-                    avg_response_time_baseline, avg_relevance_score_baseline,
-                    price_filter_usage_rate, fallback_usage_rate, cache_hit_rate,
-                    successful_query_patterns, problematic_query_patterns, recommended_improvements,
-                    avg_price_coherence, avg_diversity_score, avg_conversion_potential,
-                    last_updated
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                profile.store_id,
-                profile.product_count,
-                profile.price_range[0],
-                profile.price_range[1],
-                json.dumps(profile.category_distribution),
-                json.dumps(profile.brand_distribution),
-                json.dumps(profile.material_distribution),
-                json.dumps(profile.color_distribution),
-                profile.avg_response_time_baseline,
-                profile.avg_relevance_score_baseline,
-                profile.price_filter_usage_rate,
-                profile.fallback_usage_rate,
-                profile.cache_hit_rate,
-                json.dumps(profile.successful_query_patterns),
-                json.dumps(profile.problematic_query_patterns),
-                json.dumps(profile.recommended_improvements),
-                profile.avg_price_coherence,
-                profile.avg_diversity_score,
-                profile.avg_conversion_potential,
-                profile.last_updated.isoformat()
-            ))
-            conn.commit()
-    
+        """Save store profile to the new StoreProfileModel table."""
+        try:
+            with db_session() as db:
+                existing_profile = db.query(StoreProfileModel).filter(StoreProfileModel.store_id == profile.store_id).first()
+                if existing_profile:
+                    # Update bestaande velden
+                    for k, v in asdict(profile).items():
+                        if hasattr(existing_profile, k):
+                            setattr(existing_profile, k, json.dumps(v) if isinstance(v, (dict, list)) else v)
+                    existing_profile.last_updated = datetime.now()
+                else:
+                    # Nieuwe store profile aanmaken
+                    db.add(StoreProfileModel(**{
+                        k: (json.dumps(v) if isinstance(v, (dict, list)) else v)
+                        for k, v in asdict(profile).items()
+                    }))
+                db.commit()
+        except Exception as e:
+            logger.error(f"Error saving store profile: {e}")
+
     def _save_query_patterns(self, patterns: List[QueryPattern]):
-        """Save query patterns to database."""
-        with sqlite3.connect(self.db_path) as conn:
-            for pattern in patterns:
-                conn.execute("""
-                    INSERT OR REPLACE INTO query_patterns (
-                        pattern_type, pattern_text, success_rate, avg_relevance_score,
-                        total_usage, avg_response_time, price_filter_usage_rate,
-                        fallback_usage_rate, complexity_score, last_updated
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    pattern.pattern_type,
-                    pattern.pattern_text,
-                    pattern.success_rate,
-                    pattern.avg_relevance_score,
-                    pattern.total_usage,
-                    pattern.avg_response_time,
-                    pattern.price_filter_usage_rate,
-                    pattern.fallback_usage_rate,
-                    pattern.complexity_score,
-                    pattern.last_updated.isoformat()
-                ))
-            conn.commit()
-    
+        try:
+            with db_session() as db:
+                for pattern in patterns:
+                    existing = db.query(QueryPatternModel).filter(
+                        QueryPatternModel.pattern_type == pattern.pattern_type,
+                        QueryPatternModel.pattern_text == pattern.pattern_text
+                    ).first()
+                    if existing:
+                        for k, v in asdict(pattern).items():
+                            if hasattr(existing, k):
+                                setattr(existing, k, v)
+                    else:
+                        db.add(QueryPatternModel(**asdict(pattern)))
+                db.commit()
+        except Exception as e:
+            logger.error(f"Error saving query patterns: {e}")
+
     def _save_intent_success_matrix(self, matrix: List[Dict[str, Any]]):
-        """Save intent success matrix to database."""
-        with sqlite3.connect(self.db_path) as conn:
-            for entry in matrix:
-                conn.execute("""
-                    INSERT OR REPLACE INTO search_intent_success (
-                        intent_type, query_template, success_score, recommended_filters,
-                        fallback_strategies, avg_response_time, usage_count, last_updated
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    entry['intent_type'],
-                    entry['query_template'],
-                    entry['success_score'],
-                    entry['recommended_filters'],
-                    entry['fallback_strategies'],
-                    entry['avg_response_time'],
-                    entry['usage_count'],
-                    entry['last_updated']
-                ))
-            conn.commit()
-    
+        try:
+            with db_session() as db:
+                for entry in matrix:
+                    existing = db.query(IntentMatrixModel).filter(
+                        IntentMatrixModel.intent_type == entry['intent_type'],
+                        IntentMatrixModel.query_template == entry['query_template']
+                    ).first()
+                    if existing:
+                        for k, v in entry.items():
+                            if hasattr(existing, k):
+                                setattr(existing, k, v)
+                    else:
+                        db.add(IntentMatrixModel(**entry))
+                db.commit()
+        except Exception as e:
+            logger.error(f"Error saving intent success matrix: {e}")
+
     def _save_benchmark_history(self, df: pd.DataFrame, store_id: str):
-        """Save benchmark results to history table."""
-        with sqlite3.connect(self.db_path) as conn:
-            for _, row in df.iterrows():
-                conn.execute("""
-                    INSERT INTO benchmark_history (
-                        store_id, query, score, response_time, result_count,
-                        detected_intents, complexity_score, cache_hit,
-                        price_filter_applied, fallback_used, avg_price_top5,
-                        price_coherence, diversity_score, category_coverage,
-                        conversion_potential, timestamp
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    store_id,
-                    row['query'],
-                    row['score'],
-                    row['response_time'],
-                    row['result_count'],
-                    row.get('detected_intents', '{}'),
-                    row.get('complexity_score', 0.0),
-                    row.get('cache_hit', False),
-                    row.get('price_filter_applied', False),
-                    row.get('fallback_used', False),
-                    row.get('avg_price_top5', 0.0),
-                    row.get('price_coherence', 0.0),
-                    row.get('diversity_score', 0.0),
-                    row.get('category_coverage', 0.0),
-                    row.get('conversion_potential', 0.0),
-                    row.get('timestamp', datetime.now().isoformat())
-                ))
-            conn.commit()
-    
+        try:
+            with db_session() as db:
+                for _, row in df.iterrows():
+                    query = row['query']
+                    existing = db.query(BenchmarkHistoryModel).filter(
+                        BenchmarkHistoryModel.store_id == store_id, 
+                        BenchmarkHistoryModel.query == query
+                    ).first()
+                    row_data = {**row.to_dict(), 'store_id': store_id, 'last_updated': datetime.now()}
+                    if existing:
+                        for k, v in row_data.items():
+                            if hasattr(existing, k):
+                                setattr(existing, k, v)
+                    else:
+                        db.add(BenchmarkHistoryModel(**row_data))
+                db.commit()
+        except Exception as e:
+            logger.error(f"Error saving benchmark history: {e}")
+
     def get_store_profile(self, store_id: str) -> Optional[StoreProfile]:
-        """Retrieve store profile from database."""
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute("""
-                SELECT * FROM store_profiles WHERE store_id = ?
-            """, (store_id,))
-            
-            row = cursor.fetchone()
-            if row:
-                return StoreProfile(
-                    store_id=row[1],
-                    product_count=row[2],
-                    price_range=(row[3], row[4]),
-                    category_distribution=json.loads(row[5]),
-                    brand_distribution=json.loads(row[6]),
-                    material_distribution=json.loads(row[7]),
-                    color_distribution=json.loads(row[8]),
-                    avg_response_time_baseline=row[9],
-                    avg_relevance_score_baseline=row[10],
-                    price_filter_usage_rate=row[11],
-                    fallback_usage_rate=row[12],
-                    cache_hit_rate=row[13],
-                    successful_query_patterns=json.loads(row[14]),
-                    problematic_query_patterns=json.loads(row[15]),
-                    recommended_improvements=json.loads(row[16]),
-                    avg_price_coherence=row[17],
-                    avg_diversity_score=row[18],
-                    avg_conversion_potential=row[19],
-                    created_at=datetime.fromisoformat(row[20]),
-                    last_updated=datetime.fromisoformat(row[21])
-                )
-        
+        try:
+            with db_session() as db:
+                profile = db.query(StoreProfileModel).filter(StoreProfileModel.store_id == store_id).first()
+                if profile:
+                    return StoreProfile(
+                        store_id=profile.store_id,
+                        product_count=profile.product_count,
+                        price_range=(profile.price_range_min, profile.price_range_max),
+                        category_distribution=json.loads(profile.category_distribution),
+                        brand_distribution=json.loads(profile.brand_distribution),
+                        material_distribution=json.loads(profile.material_distribution),
+                        color_distribution=json.loads(profile.color_distribution),
+                        avg_response_time_baseline=profile.avg_response_time_baseline,
+                        avg_relevance_score_baseline=profile.avg_relevance_score_baseline,
+                        price_filter_usage_rate=profile.price_filter_usage_rate,
+                        fallback_usage_rate=profile.fallback_usage_rate,
+                        cache_hit_rate=profile.cache_hit_rate,
+                        successful_query_patterns=json.loads(profile.successful_query_patterns),
+                        problematic_query_patterns=json.loads(profile.problematic_query_patterns),
+                        recommended_improvements=json.loads(profile.recommended_improvements),
+                        avg_price_coherence=profile.avg_price_coherence,
+                        avg_diversity_score=profile.avg_diversity_score,
+                        avg_conversion_potential=profile.avg_conversion_potential,
+                        created_at=profile.created_at,
+                        last_updated=profile.last_updated
+                    )
+        except Exception as e:
+            logger.error(f"Error retrieving store profile: {e}")
         return None
-    
-    def get_similar_stores(self, store_profile: StoreProfile, limit: int = 5) -> List[StoreProfile]:
-        """Find similar stores based on profile characteristics."""
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute("""
-                SELECT * FROM store_profiles 
-                WHERE store_id != ? 
-                ORDER BY ABS(avg_relevance_score_baseline - ?) + 
-                         ABS(avg_response_time_baseline - ?) +
-                         ABS(price_filter_usage_rate - ?)
-                LIMIT ?
-            """, (
-                store_profile.store_id,
-                store_profile.avg_relevance_score_baseline,
-                store_profile.avg_response_time_baseline,
-                store_profile.price_filter_usage_rate,
-                limit
-            ))
+
+    def get_similar_stores(self, store_profile: StoreProfile, limit: int = DEFAULT_SIMILAR_STORES_LIMIT) -> List[StoreProfile]:
+        """
+        Get similar stores based on performance metrics.
+        
+        Args:
+            store_profile: Store profile to find similar stores for
+            limit: Maximum number of similar stores to return
             
-            similar_stores = []
-            for row in cursor.fetchall():
-                similar_stores.append(StoreProfile(
-                    store_id=row[1],
-                    product_count=row[2],
-                    price_range=(row[3], row[4]),
-                    category_distribution=json.loads(row[5]),
-                    brand_distribution=json.loads(row[6]),
-                    material_distribution=json.loads(row[7]),
-                    color_distribution=json.loads(row[8]),
-                    avg_response_time_baseline=row[9],
-                    avg_relevance_score_baseline=row[10],
-                    price_filter_usage_rate=row[11],
-                    fallback_usage_rate=row[12],
-                    cache_hit_rate=row[13],
-                    successful_query_patterns=json.loads(row[14]),
-                    problematic_query_patterns=json.loads(row[15]),
-                    recommended_improvements=json.loads(row[16]),
-                    avg_price_coherence=row[17],
-                    avg_diversity_score=row[18],
-                    avg_conversion_potential=row[19],
-                    created_at=datetime.fromisoformat(row[20]),
-                    last_updated=datetime.fromisoformat(row[21])
-                ))
-            
-            return similar_stores
+        Returns:
+            List of similar store profiles
+        """
+        try:
+            with db_session() as db:
+                similar_stores = db.query(StoreProfileModel).filter(
+                    StoreProfileModel.store_id != store_profile.store_id
+                ).order_by(
+                    func.abs(StoreProfileModel.avg_relevance_score_baseline - store_profile.avg_relevance_score_baseline) +
+                    func.abs(StoreProfileModel.avg_response_time_baseline - store_profile.avg_response_time_baseline) +
+                    func.abs(StoreProfileModel.price_filter_usage_rate - store_profile.price_filter_usage_rate)
+                ).limit(limit).all()
+
+                return [StoreProfile(
+                    store_id=s.store_id,
+                    product_count=s.product_count,
+                    price_range=(s.price_range_min, s.price_range_max),
+                    category_distribution=json.loads(s.category_distribution),
+                    brand_distribution=json.loads(s.brand_distribution),
+                    material_distribution=json.loads(s.material_distribution),
+                    color_distribution=json.loads(s.color_distribution),
+                    avg_response_time_baseline=s.avg_response_time_baseline,
+                    avg_relevance_score_baseline=s.avg_relevance_score_baseline,
+                    price_filter_usage_rate=s.price_filter_usage_rate,
+                    fallback_usage_rate=s.fallback_usage_rate,
+                    cache_hit_rate=s.cache_hit_rate,
+                    successful_query_patterns=json.loads(s.successful_query_patterns),
+                    problematic_query_patterns=json.loads(s.problematic_query_patterns),
+                    recommended_improvements=json.loads(s.recommended_improvements),
+                    avg_price_coherence=s.avg_price_coherence,
+                    avg_diversity_score=s.avg_diversity_score,
+                    avg_conversion_potential=s.avg_conversion_potential,
+                    created_at=s.created_at,
+                    last_updated=s.last_updated
+                ) for s in similar_stores]
+        except Exception as e:
+            logger.error(ERROR_SIMILAR_STORES.format(error=str(e)))
+        return []
     
-    def generate_transfer_learning_recommendations(self, store_profile: StoreProfile) -> Dict[str, Any]:
-        """Generate transfer learning recommendations for a new store."""
-        similar_stores = self.get_similar_stores(store_profile)
+    def _calculate_recommendation_counts(self, similar_stores: List[StoreProfile]) -> Dict[str, int]:
+        """
+        Calculate recommendation counts from similar stores.
         
-        if not similar_stores:
-            return {
-                "message": "No similar stores found for transfer learning",
-                "recommendations": []
-            }
+        Args:
+            similar_stores: List of similar store profiles
+            
+        Returns:
+            Dictionary with recommendation counts
+        """
+        all_recommendations = [rec for s in similar_stores for rec in s.recommended_improvements]
+        return {rec: all_recommendations.count(rec) for rec in set(all_recommendations)}
+    
+    def _get_top_recommendations(self, recommendation_counts: Dict[str, int]) -> List[str]:
+        """
+        Get top recommendations based on counts.
         
-        # Aggregate recommendations from similar stores
-        all_recommendations = []
-        for store in similar_stores:
-            all_recommendations.extend(store.recommended_improvements)
+        Args:
+            recommendation_counts: Dictionary with recommendation counts
+            
+        Returns:
+            List of top recommendations
+        """
+        top_recommendations = sorted(recommendation_counts.items(), key=lambda x: x[1], reverse=True)[:DEFAULT_TOP_RECOMMENDATIONS_LIMIT]
+        return [rec[0] for rec in top_recommendations]
+    
+    def _calculate_expected_performance(self, similar_stores: List[StoreProfile]) -> Dict[str, float]:
+        """
+        Calculate expected performance from similar stores.
         
-        # Count and rank recommendations
-        recommendation_counts = {}
-        for rec in all_recommendations:
-            recommendation_counts[rec] = recommendation_counts.get(rec, 0) + 1
-        
-        # Get top recommendations
-        top_recommendations = sorted(
-            recommendation_counts.items(), 
-            key=lambda x: x[1], 
-            reverse=True
-        )[:5]
-        
-        # Calculate expected performance
+        Args:
+            similar_stores: List of similar store profiles
+            
+        Returns:
+            Dictionary with expected performance metrics
+        """
         avg_similar_score = statistics.mean([s.avg_relevance_score_baseline for s in similar_stores])
         avg_similar_response_time = statistics.mean([s.avg_response_time_baseline for s in similar_stores])
+        confidence = min(DEFAULT_MAX_CONFIDENCE, len(similar_stores) * DEFAULT_CONFIDENCE_MULTIPLIER)
+        
+        return {
+            "relevance_score": avg_similar_score,
+            "response_time": avg_similar_response_time,
+            "confidence": confidence
+        }
+
+    def generate_transfer_learning_recommendations(self, store_profile: StoreProfile) -> Dict[str, Any]:
+        """
+        Generate transfer learning recommendations from similar stores.
+        
+        Args:
+            store_profile: Store profile to generate recommendations for
+            
+        Returns:
+            Dictionary with transfer learning recommendations
+        """
+        similar_stores = self.get_similar_stores(store_profile)
+        if not similar_stores:
+            return {"message": ERROR_NO_SIMILAR_STORES, "recommendations": []}
+        
+        recommendation_counts = self._calculate_recommendation_counts(similar_stores)
+        top_recommendations = self._get_top_recommendations(recommendation_counts)
+        expected_performance = self._calculate_expected_performance(similar_stores)
         
         return {
             "similar_stores_count": len(similar_stores),
-            "top_recommendations": [rec[0] for rec in top_recommendations],
-            "expected_performance": {
-                "relevance_score": avg_similar_score,
-                "response_time": avg_similar_response_time,
-                "confidence": min(0.9, len(similar_stores) * 0.2)
-            },
+            "top_recommendations": top_recommendations,
+            "expected_performance": expected_performance,
             "transferable_patterns": self._extract_transferable_patterns(similar_stores)
         }
-    
+
     def _extract_transferable_patterns(self, similar_stores: List[StoreProfile]) -> List[str]:
-        """Extract transferable patterns from similar stores."""
-        patterns = []
+        """
+        Extract transferable patterns from similar stores.
         
-        for store in similar_stores:
-            patterns.extend(store.successful_query_patterns)
-        
-        # Count and return most common patterns
-        pattern_counts = {}
-        for pattern in patterns:
-            pattern_counts[pattern] = pattern_counts.get(pattern, 0) + 1
-        
-        return [pattern for pattern, count in sorted(
-            pattern_counts.items(), 
-            key=lambda x: x[1], 
-            reverse=True
-        )[:10]]
+        Args:
+            similar_stores: List of similar store profiles
+            
+        Returns:
+            List of transferable patterns
+        """
+        patterns = [p for s in similar_stores for p in s.successful_query_patterns]
+        pattern_counts = {p: patterns.count(p) for p in set(patterns)}
+        return [p for p, _ in sorted(pattern_counts.items(), key=lambda x: x[1], reverse=True)[:DEFAULT_TRANSFERABLE_PATTERNS_LIMIT]]
 
 def main():
-    """Main function for processing benchmark results."""
     import argparse
-    
     parser = argparse.ArgumentParser(description="Knowledge Base Builder")
     parser.add_argument("--results", required=True, help="Benchmark results CSV file")
     parser.add_argument("--store-id", help="Store ID for the results")
     parser.add_argument("--db-path", default="search_knowledge_base.db", help="Database path")
-    
     args = parser.parse_args()
-    
-    # Initialize knowledge base builder
+
     builder = KnowledgeBaseBuilder(args.db_path)
-    
-    # Process benchmark results
     store_profile = builder.process_benchmark_results(args.results, args.store_id)
-    
-    # Generate transfer learning recommendations
     recommendations = builder.generate_transfer_learning_recommendations(store_profile)
-    
-    # Print summary
+
     print("\n" + "="*60)
     print("📊 KNOWLEDGE BASE BUILD SUMMARY")
     print("="*60)
@@ -747,4 +634,95 @@ def main():
     print("\n" + "="*60)
 
 if __name__ == "__main__":
-    main() 
+    main()
+
+# TODO: Future Improvements and Recommendations
+"""
+TODO: Future Improvements and Recommendations
+
+## 🔄 Module Opsplitsing
+- [ ] Split into separate modules:
+  - `store_profile_builder.py` - Store profile building logic
+  - `query_pattern_analyzer.py` - Query pattern analysis
+  - `intent_matrix_builder.py` - Intent success matrix building
+  - `transfer_learning_engine.py` - Transfer learning recommendations
+  - `benchmark_history_manager.py` - Benchmark history management
+  - `knowledge_base_orchestrator.py` - Main orchestration
+
+## 🗑️ Functies voor Verwijdering
+- [ ] `main()` - Consider moving to a dedicated CLI module
+- [ ] `db_session()` - Consider moving to a dedicated database module
+- [ ] `_save_benchmark_history()` - Consider moving to a dedicated history service
+- [ ] `_save_store_profile()` - Consider moving to a dedicated profile service
+
+## ⚡ Performance Optimalisaties
+- [ ] Implement caching for frequently accessed store profiles
+- [ ] Add batch processing for multiple benchmark results
+- [ ] Implement parallel processing for pattern analysis
+- [ ] Optimize database queries for large datasets
+- [ ] Add indexing for frequently accessed patterns
+
+## 🏗️ Architectuur Verbeteringen
+- [ ] Implement proper dependency injection
+- [ ] Add configuration management for different environments
+- [ ] Implement proper error recovery mechanisms
+- [ ] Add comprehensive unit and integration tests
+- [ ] Implement proper logging strategy with structured logging
+
+## 🔧 Code Verbeteringen
+- [ ] Add type hints for all methods
+- [ ] Implement proper error handling with custom exceptions
+- [ ] Add comprehensive docstrings for all methods
+- [ ] Implement proper validation for input parameters
+- [ ] Add proper constants for all magic numbers
+
+## 📊 Monitoring en Observability
+- [ ] Add comprehensive metrics collection
+- [ ] Implement proper distributed tracing
+- [ ] Add health checks for the service
+- [ ] Implement proper alerting mechanisms
+- [ ] Add performance monitoring
+
+## 🔒 Security Verbeteringen
+- [ ] Implement proper authentication and authorization
+- [ ] Add input validation and sanitization
+- [ ] Implement proper secrets management
+- [ ] Add audit logging for sensitive operations
+- [ ] Implement proper data encryption
+
+## 🧪 Testing Verbeteringen
+- [ ] Add unit tests for all helper methods
+- [ ] Implement integration tests for database operations
+- [ ] Add performance tests for large datasets
+- [ ] Implement proper mocking strategies
+- [ ] Add end-to-end tests for complete knowledge base flow
+
+## 📚 Documentatie Verbeteringen
+- [ ] Add comprehensive API documentation
+- [ ] Implement proper code examples
+- [ ] Add troubleshooting guides
+- [ ] Implement proper changelog management
+- [ ] Add architecture decision records (ADRs)
+
+## 🎯 Specifieke Verbeteringen
+- [ ] Refactor large data processing methods into smaller, more focused ones
+- [ ] Implement proper error handling for database operations
+- [ ] Add retry mechanisms for failed operations
+- [ ] Implement proper caching strategies
+- [ ] Add support for different output formats
+- [ ] Implement proper progress tracking
+- [ ] Add support for custom analysis scenarios
+- [ ] Implement proper result aggregation
+- [ ] Add support for different data sources
+- [ ] Implement proper result validation
+- [ ] Add support for real-time knowledge base updates
+- [ ] Implement proper data versioning
+- [ ] Add support for knowledge base comparison
+- [ ] Implement proper data export functionality
+- [ ] Add support for knowledge base templates
+- [ ] Implement proper A/B testing for knowledge base
+- [ ] Add support for personalized knowledge base
+- [ ] Implement proper feedback collection
+- [ ] Add support for knowledge base analytics
+- [ ] Implement proper knowledge base ranking
+"""
