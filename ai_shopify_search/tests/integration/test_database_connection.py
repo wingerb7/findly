@@ -12,12 +12,12 @@ import json
 import time
 from datetime import datetime, timedelta
 
-from core.database import SessionLocal, get_db
-# from core.database_async import get_async_db  # Removed - file doesn't exist
-from core.models import Product, SearchAnalytics, SearchClick
-from services.cache_service import CacheService
-from services.analytics_service import AnalyticsService
-from utils.privacy import anonymize_ip
+from ai_shopify_search.core.database import SessionLocal, get_db
+# from ai_shopify_search.core.database_async import get_async_db  # Removed - file doesn't exist
+from ai_shopify_search.core.models import Product, SearchAnalytics, SearchClick
+from ai_shopify_search.services.cache_service import CacheService
+from ai_shopify_search.services.analytics_service import AnalyticsService
+from ai_shopify_search.utils.privacy import anonymize_ip
 
 
 @pytest.mark.skip(reason="Database and Redis dependencies not properly configured for CI environment")

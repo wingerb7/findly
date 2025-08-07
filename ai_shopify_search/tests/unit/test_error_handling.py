@@ -5,7 +5,7 @@ Simple tests for utils/error_handling.py - only testing what actually exists.
 
 import pytest
 import asyncio
-from utils.error_handling import (
+from ai_shopify_search.utils.error_handling import (
     BaseError, ValidationError, DatabaseError, NetworkError,
     AuthenticationError, AuthorizationError, RateLimitError,
     CacheError, ExternalAPIError, SystemError,

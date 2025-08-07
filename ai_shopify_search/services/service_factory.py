@@ -8,14 +8,13 @@ from typing import Dict, Any, Optional
 from .cache_service import CacheService
 from .analytics_service import AnalyticsService
 from .ai_search_service import AISearchService
-from .autocomplete_service import AutocompleteService
 from .suggestion_service import SuggestionService
 from .transfer_learning_service import TransferLearningService
 from .knowledge_base_service import KnowledgeBaseService
 from .baseline_generator_service import BaselineGeneratorService
 from .pattern_learning_service import PatternLearningService
 from .facets_service import FacetsService
-from .smart_autocomplete import SmartAutocompleteService
+from .continuous_benchmark_service import ContinuousBenchmarkService
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +39,6 @@ class ServiceFactory:
             
             # Initialize dependent services
             ai_search_service = AISearchService(cache_service, analytics_service)
-            autocomplete_service = AutocompleteService(cache_service, analytics_service)
             suggestion_service = SuggestionService(cache_service)
             
             # Initialize AI feature services
@@ -48,22 +46,21 @@ class ServiceFactory:
             knowledge_base_service = KnowledgeBaseService()
             baseline_generator_service = BaselineGeneratorService()
             pattern_learning_service = PatternLearningService()
-            facets_service = FacetsService()
-            smart_autocomplete_service = SmartAutocompleteService()
+            facets_service = FacetsService(cache_service)
+            continuous_benchmark_service = ContinuousBenchmarkService()
             
             # Store services
             self._services = {
                 "cache": cache_service,
                 "analytics": analytics_service,
                 "ai_search": ai_search_service,
-                "autocomplete": autocomplete_service,
                 "suggestion": suggestion_service,
                 "transfer_learning": transfer_learning_service,
                 "knowledge_base": knowledge_base_service,
                 "baseline_generator": baseline_generator_service,
                 "pattern_learning": pattern_learning_service,
                 "facets": facets_service,
-                "smart_autocomplete": smart_autocomplete_service
+                "continuous_benchmark": continuous_benchmark_service
             }
             
             # Health check
@@ -122,10 +119,6 @@ class ServiceFactory:
         """Get AI search service."""
         return self.get_service("ai_search")
     
-    def get_autocomplete_service(self) -> AutocompleteService:
-        """Get autocomplete service."""
-        return self.get_service("autocomplete")
-    
     def get_suggestion_service(self) -> SuggestionService:
         """Get suggestion service."""
         return self.get_service("suggestion")
@@ -150,9 +143,9 @@ class ServiceFactory:
         """Get facets service."""
         return self.get_service("facets")
     
-    def get_smart_autocomplete_service(self) -> SmartAutocompleteService:
-        """Get smart autocomplete service."""
-        return self.get_service("smart_autocomplete")
+    def get_continuous_benchmark_service(self) -> ContinuousBenchmarkService:
+        """Get continuous benchmark service."""
+        return self.get_service("continuous_benchmark")
     
     async def shutdown(self) -> None:
         """Shutdown all services."""
@@ -229,11 +222,6 @@ async def get_ai_search_service() -> AISearchService:
     factory = await get_service_factory()
     return factory.get_ai_search_service()
 
-async def get_autocomplete_service() -> AutocompleteService:
-    """Get autocomplete service."""
-    factory = await get_service_factory()
-    return factory.get_autocomplete_service()
-
 async def get_suggestion_service() -> SuggestionService:
     """Get suggestion service."""
     factory = await get_service_factory()
@@ -264,7 +252,7 @@ async def get_facets_service() -> FacetsService:
     factory = await get_service_factory()
     return factory.get_facets_service()
 
-async def get_smart_autocomplete_service() -> SmartAutocompleteService:
-    """Get smart autocomplete service."""
+async def get_continuous_benchmark_service() -> ContinuousBenchmarkService:
+    """Get continuous benchmark service."""
     factory = await get_service_factory()
-    return factory.get_smart_autocomplete_service() 
+    return factory.get_continuous_benchmark_service() 

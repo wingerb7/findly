@@ -12,8 +12,8 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from datetime import datetime
 
-from core.database import get_db
-from services.service_factory import get_analytics_service
+from ai_shopify_search.core.database import get_db
+from ai_shopify_search.services.service_factory import get_analytics_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -53,14 +53,17 @@ async def submit_search_feedback(
     try:
         analytics_service = await get_analytics_service()
         
-        # Track search feedback
-        await analytics_service.track_search_feedback(
+        # Track search feedback using existing method
+        await analytics_service.track_search(
+            db=db,
             query=feedback.query,
-            result_count=feedback.result_count,
-            clicked_product_id=feedback.clicked_product_id,
-            search_time_ms=feedback.search_time_ms,
-            user_satisfaction=feedback.user_satisfaction,
-            feedback_text=feedback.feedback_text,
+            search_type="feedback",
+            filters={},
+            results_count=feedback.result_count,
+            page=1,
+            limit=feedback.result_count,
+            response_time_ms=feedback.search_time_ms or 0,
+            cache_hit=False,
             user_agent=feedback.user_agent,
             ip_address=feedback.ip_address
         )
@@ -84,11 +87,17 @@ async def submit_autocomplete_feedback(
     try:
         analytics_service = await get_analytics_service()
         
-        # Track autocomplete feedback
-        await analytics_service.track_autocomplete_feedback(
+        # Track autocomplete feedback using existing method
+        await analytics_service.track_search(
+            db=db,
             query=feedback.query,
-            selected_suggestion=feedback.selected_suggestion,
-            suggestion_position=feedback.suggestion_position,
+            search_type="autocomplete_feedback",
+            filters={"selected_suggestion": feedback.selected_suggestion, "position": feedback.suggestion_position},
+            results_count=1,
+            page=1,
+            limit=1,
+            response_time_ms=0,
+            cache_hit=False,
             user_agent=feedback.user_agent,
             ip_address=feedback.ip_address
         )
@@ -112,12 +121,17 @@ async def submit_general_feedback(
     try:
         analytics_service = await get_analytics_service()
         
-        # Track general feedback
-        await analytics_service.track_general_feedback(
-            feedback_type=feedback.feedback_type,
-            title=feedback.title,
-            description=feedback.description,
-            severity=feedback.severity,
+        # Track general feedback using existing method
+        await analytics_service.track_search(
+            db=db,
+            query=f"{feedback.feedback_type}: {feedback.title}",
+            search_type="general_feedback",
+            filters={"feedback_type": feedback.feedback_type, "severity": feedback.severity},
+            results_count=1,
+            page=1,
+            limit=1,
+            response_time_ms=0,
+            cache_hit=False,
             user_agent=feedback.user_agent,
             ip_address=feedback.ip_address
         )

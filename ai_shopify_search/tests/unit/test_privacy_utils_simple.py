@@ -6,7 +6,7 @@ Simple tests for utils/privacy_utils.py - only testing what actually exists.
 import pytest
 import time
 from datetime import datetime, timedelta
-from utils.privacy import (
+from ai_shopify_search.utils.privacy import (
     anonymize_ip, sanitize_user_agent, generate_session_id,
     is_session_expired, sanitize_log_data, DataRetentionManager, PRIVACY_CONFIG
 )

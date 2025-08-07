@@ -15,9 +15,9 @@ import statistics
 from datetime import datetime
 
 from main import app
-from core.database import SessionLocal
-from core.models import Product, SearchAnalytics
-from services.service_factory import service_factory
+from ai_shopify_search.core.database import SessionLocal
+from ai_shopify_search.core.models import Product, SearchAnalytics
+from ai_shopify_search.services.service_factory import service_factory
 from performance_monitor import PerformanceMonitor
 
 

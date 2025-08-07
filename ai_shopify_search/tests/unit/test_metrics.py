@@ -6,7 +6,7 @@ Simple tests for metrics.py - only testing what actually exists.
 import pytest
 import time
 from unittest.mock import Mock, patch, MagicMock
-from metrics import (
+from ai_shopify_search.core.metrics import (
     MetricsCollector, metrics_collector,
     SEARCH_REQUESTS_TOTAL, SEARCH_RESPONSE_TIME, SEARCH_RESULTS_COUNT,
     CACHE_HIT_RATIO, ACTIVE_CONNECTIONS, REDIS_CONNECTIONS
@@ -24,11 +24,11 @@ class TestMetricsCollector:
         """Test successful search request recording."""
         collector = MetricsCollector()
         
-        with patch('metrics.SEARCH_REQUESTS_TOTAL') as mock_counter:
-            with patch('metrics.SEARCH_RESPONSE_TIME') as mock_histogram:
-                with patch('metrics.SEARCH_RESULTS_COUNT') as mock_results:
-                    with patch('metrics.CACHE_HIT_RATIO') as mock_cache:
-                        with patch('metrics.logger') as mock_logger:
+        with patch('ai_shopify_search.core.metrics.SEARCH_REQUESTS_TOTAL') as mock_counter:
+            with patch('ai_shopify_search.core.metrics.SEARCH_RESPONSE_TIME') as mock_histogram:
+                with patch('ai_shopify_search.core.metrics.SEARCH_RESULTS_COUNT') as mock_results:
+                    with patch('ai_shopify_search.core.metrics.CACHE_HIT_RATIO') as mock_cache:
+                        with patch('ai_shopify_search.core.metrics.logger') as mock_logger:
                             collector.record_search_request(
                                 search_type="ai",
                                 cache_hit=True,
@@ -53,11 +53,11 @@ class TestMetricsCollector:
         """Test search request recording with cache miss."""
         collector = MetricsCollector()
         
-        with patch('metrics.SEARCH_REQUESTS_TOTAL') as mock_counter:
-            with patch('metrics.SEARCH_RESPONSE_TIME') as mock_histogram:
-                with patch('metrics.SEARCH_RESULTS_COUNT') as mock_results:
-                    with patch('metrics.CACHE_HIT_RATIO') as mock_cache:
-                        with patch('metrics.logger') as mock_logger:
+        with patch('ai_shopify_search.core.metrics.SEARCH_REQUESTS_TOTAL') as mock_counter:
+            with patch('ai_shopify_search.core.metrics.SEARCH_RESPONSE_TIME') as mock_histogram:
+                with patch('ai_shopify_search.core.metrics.SEARCH_RESULTS_COUNT') as mock_results:
+                    with patch('ai_shopify_search.core.metrics.CACHE_HIT_RATIO') as mock_cache:
+                        with patch('ai_shopify_search.core.metrics.logger') as mock_logger:
                             collector.record_search_request(
                                 search_type="basic",
                                 cache_hit=False,
@@ -73,9 +73,9 @@ class TestMetricsCollector:
         """Test search request recording with error."""
         collector = MetricsCollector()
         
-        with patch('metrics.SEARCH_REQUESTS_TOTAL') as mock_counter:
+        with patch('ai_shopify_search.core.metrics.SEARCH_REQUESTS_TOTAL') as mock_counter:
             mock_counter.labels.side_effect = Exception("Metrics error")
-            with patch('metrics.logger') as mock_logger:
+            with patch('ai_shopify_search.core.metrics.logger') as mock_logger:
                 # Should not raise exception
                 collector.record_search_request(
                     search_type="ai",
@@ -91,8 +91,8 @@ class TestMetricsCollector:
         """Test successful database connections recording."""
         collector = MetricsCollector()
         
-        with patch('metrics.ACTIVE_CONNECTIONS') as mock_gauge:
-            with patch('metrics.logger') as mock_logger:
+        with patch('ai_shopify_search.core.metrics.ACTIVE_CONNECTIONS') as mock_gauge:
+            with patch('ai_shopify_search.core.metrics.logger') as mock_logger:
                 collector.record_database_connections(10)
             
             mock_gauge.set.assert_called_once_with(10)
@@ -101,9 +101,9 @@ class TestMetricsCollector:
         """Test database connections recording with error."""
         collector = MetricsCollector()
         
-        with patch('metrics.ACTIVE_CONNECTIONS') as mock_gauge:
+        with patch('ai_shopify_search.core.metrics.ACTIVE_CONNECTIONS') as mock_gauge:
             mock_gauge.set.side_effect = Exception("Gauge error")
-            with patch('metrics.logger') as mock_logger:
+            with patch('ai_shopify_search.core.metrics.logger') as mock_logger:
                 # Should not raise exception
                 collector.record_database_connections(5)
             
@@ -114,8 +114,8 @@ class TestMetricsCollector:
         """Test successful Redis connections recording."""
         collector = MetricsCollector()
         
-        with patch('metrics.REDIS_CONNECTIONS') as mock_gauge:
-            with patch('metrics.logger') as mock_logger:
+        with patch('ai_shopify_search.core.metrics.REDIS_CONNECTIONS') as mock_gauge:
+            with patch('ai_shopify_search.core.metrics.logger') as mock_logger:
                 collector.record_redis_connections(3)
             
             mock_gauge.set.assert_called_once_with(3)
@@ -124,9 +124,9 @@ class TestMetricsCollector:
         """Test Redis connections recording with error."""
         collector = MetricsCollector()
         
-        with patch('metrics.REDIS_CONNECTIONS') as mock_gauge:
+        with patch('ai_shopify_search.core.metrics.REDIS_CONNECTIONS') as mock_gauge:
             mock_gauge.set.side_effect = Exception("Gauge error")
-            with patch('metrics.logger') as mock_logger:
+            with patch('ai_shopify_search.core.metrics.logger') as mock_logger:
                 # Should not raise exception
                 collector.record_redis_connections(2)
             
@@ -137,9 +137,9 @@ class TestMetricsCollector:
         """Test successful metrics generation."""
         collector = MetricsCollector()
         
-        with patch('metrics.generate_latest') as mock_generate:
+        with patch('ai_shopify_search.core.metrics.generate_latest') as mock_generate:
             mock_generate.return_value = "test_metrics_data"
-            with patch('metrics.logger') as mock_logger:
+            with patch('ai_shopify_search.core.metrics.logger') as mock_logger:
                 result = collector.get_metrics()
             
             assert result == "test_metrics_data"
@@ -149,9 +149,9 @@ class TestMetricsCollector:
         """Test metrics generation with error."""
         collector = MetricsCollector()
         
-        with patch('metrics.generate_latest') as mock_generate:
+        with patch('ai_shopify_search.core.metrics.generate_latest') as mock_generate:
             mock_generate.side_effect = Exception("Generation error")
-            with patch('metrics.logger') as mock_logger:
+            with patch('ai_shopify_search.core.metrics.logger') as mock_logger:
                 result = collector.get_metrics()
             
             assert result == ""
@@ -216,13 +216,13 @@ class TestMetricsCollectorIntegration:
         """Test complete metrics workflow."""
         collector = MetricsCollector()
         
-        with patch('metrics.SEARCH_REQUESTS_TOTAL') as mock_counter:
-            with patch('metrics.SEARCH_RESPONSE_TIME') as mock_histogram:
-                with patch('metrics.SEARCH_RESULTS_COUNT') as mock_results:
-                    with patch('metrics.CACHE_HIT_RATIO') as mock_cache:
-                        with patch('metrics.ACTIVE_CONNECTIONS') as mock_db:
-                            with patch('metrics.REDIS_CONNECTIONS') as mock_redis:
-                                with patch('metrics.logger') as mock_logger:
+        with patch('ai_shopify_search.core.metrics.SEARCH_REQUESTS_TOTAL') as mock_counter:
+            with patch('ai_shopify_search.core.metrics.SEARCH_RESPONSE_TIME') as mock_histogram:
+                with patch('ai_shopify_search.core.metrics.SEARCH_RESULTS_COUNT') as mock_results:
+                    with patch('ai_shopify_search.core.metrics.CACHE_HIT_RATIO') as mock_cache:
+                        with patch('ai_shopify_search.core.metrics.ACTIVE_CONNECTIONS') as mock_db:
+                            with patch('ai_shopify_search.core.metrics.REDIS_CONNECTIONS') as mock_redis:
+                                with patch('ai_shopify_search.core.metrics.logger') as mock_logger:
                                     # Record search request
                                     collector.record_search_request(
                                         search_type="ai",
@@ -236,7 +236,7 @@ class TestMetricsCollectorIntegration:
                                     collector.record_redis_connections(2)
                                     
                                     # Get metrics
-                                    with patch('metrics.generate_latest', return_value="metrics_data"):
+                                    with patch('ai_shopify_search.core.metrics.generate_latest', return_value="metrics_data"):
                                         result = collector.get_metrics()
                                     
                                     assert result == "metrics_data"
@@ -245,11 +245,11 @@ class TestMetricsCollectorIntegration:
         """Test metrics with multiple search types."""
         collector = MetricsCollector()
         
-        with patch('metrics.SEARCH_REQUESTS_TOTAL') as mock_counter:
-            with patch('metrics.SEARCH_RESPONSE_TIME') as mock_histogram:
-                with patch('metrics.SEARCH_RESULTS_COUNT') as mock_results:
-                    with patch('metrics.CACHE_HIT_RATIO') as mock_cache:
-                        with patch('metrics.logger') as mock_logger:
+        with patch('ai_shopify_search.core.metrics.SEARCH_REQUESTS_TOTAL') as mock_counter:
+            with patch('ai_shopify_search.core.metrics.SEARCH_RESPONSE_TIME') as mock_histogram:
+                with patch('ai_shopify_search.core.metrics.SEARCH_RESULTS_COUNT') as mock_results:
+                    with patch('ai_shopify_search.core.metrics.CACHE_HIT_RATIO') as mock_cache:
+                        with patch('ai_shopify_search.core.metrics.logger') as mock_logger:
                             # AI search
                             collector.record_search_request(
                                 search_type="ai",
@@ -284,11 +284,11 @@ class TestMetricsCollectorIntegration:
         """Test metrics with extreme values."""
         collector = MetricsCollector()
         
-        with patch('metrics.SEARCH_REQUESTS_TOTAL') as mock_counter:
-            with patch('metrics.SEARCH_RESPONSE_TIME') as mock_histogram:
-                with patch('metrics.SEARCH_RESULTS_COUNT') as mock_results:
-                    with patch('metrics.CACHE_HIT_RATIO') as mock_cache:
-                        with patch('metrics.logger') as mock_logger:
+        with patch('ai_shopify_search.core.metrics.SEARCH_REQUESTS_TOTAL') as mock_counter:
+            with patch('ai_shopify_search.core.metrics.SEARCH_RESPONSE_TIME') as mock_histogram:
+                with patch('ai_shopify_search.core.metrics.SEARCH_RESULTS_COUNT') as mock_results:
+                    with patch('ai_shopify_search.core.metrics.CACHE_HIT_RATIO') as mock_cache:
+                        with patch('ai_shopify_search.core.metrics.logger') as mock_logger:
                             # Very fast response
                             collector.record_search_request(
                                 search_type="basic",
@@ -321,9 +321,9 @@ class TestMetricsCollectorIntegration:
         """Test connection metrics with edge cases."""
         collector = MetricsCollector()
         
-        with patch('metrics.ACTIVE_CONNECTIONS') as mock_db:
-            with patch('metrics.REDIS_CONNECTIONS') as mock_redis:
-                with patch('metrics.logger') as mock_logger:
+        with patch('ai_shopify_search.core.metrics.ACTIVE_CONNECTIONS') as mock_db:
+            with patch('ai_shopify_search.core.metrics.REDIS_CONNECTIONS') as mock_redis:
+                with patch('ai_shopify_search.core.metrics.logger') as mock_logger:
                     # Zero connections
                     collector.record_database_connections(0)
                     collector.record_redis_connections(0)

@@ -10,7 +10,7 @@ from datetime import datetime
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from features.refinement_agent import (
+from ai_shopify_search.features.refinement_agent import (
     ConversationalRefinementAgent, RefinementContext, RefinementType, RefinementPriority
 )
 

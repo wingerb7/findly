@@ -5,11 +5,11 @@ Tests core functionality without complex dependencies.
 import pytest
 import json
 from unittest.mock import Mock, patch
-from utils.privacy import anonymize_ip, sanitize_user_agent, sanitize_log_data
-from utils.validation import sanitize_search_query, validate_price_range
-from utils.error_handling import BaseError, ValidationError, DatabaseError
-from core.models import Product, SearchAnalytics
-from core.config import DATABASE_URL
+from ai_shopify_search.utils.privacy import anonymize_ip, sanitize_user_agent, sanitize_log_data
+from ai_shopify_search.utils.validation import sanitize_search_query, validate_price_range
+from ai_shopify_search.utils.error_handling import BaseError, ValidationError, DatabaseError
+from ai_shopify_search.core.models import Product, SearchAnalytics
+from ai_shopify_search.core.config import DATABASE_URL
 
 
 def test_privacy_utils_basic():
@@ -133,19 +133,19 @@ def test_utils_imports():
     print("=" * 30)
     
     # Test privacy utils imports
-    from utils.privacy import (
+    from ai_shopify_search.utils.privacy import (
         anonymize_ip, sanitize_user_agent, sanitize_log_data,
         generate_session_id, is_session_expired
     )
     
     # Test validation imports
-    from utils.validation import (
+    from ai_shopify_search.utils.validation import (
         sanitize_search_query, validate_price_range,
         generate_secure_cache_key
     )
     
     # Test error handling imports
-    from utils.error_handling import (
+    from ai_shopify_search.utils.error_handling import (
         BaseError, ValidationError, DatabaseError,
         NetworkError, ErrorHandler
     )
@@ -159,9 +159,9 @@ def test_core_imports():
     print("=" * 25)
     
     # Test core imports
-    from core.models import Product, SearchAnalytics, PopularSearch
-    from core.database import Base, engine, SessionLocal
-    # from core.database_async import AsyncDatabaseService  # Removed - file doesn't exist
+    from ai_shopify_search.core.models import Product, SearchAnalytics, PopularSearch
+    from ai_shopify_search.core.database import Base, engine, SessionLocal
+    # from ai_shopify_search.core.database_async import AsyncDatabaseService  # Removed - file doesn't exist
     
     print("✅ All core imports successful")
 
@@ -172,12 +172,12 @@ def test_services_imports():
     print("=" * 30)
     
     # Test service imports
-    from services.ai_search_service import AISearchService
-    from services.cache_service import CacheService
-    from services.analytics_service import AnalyticsService
-    from services.autocomplete_service import AutocompleteService
-    from services.suggestion_service import SuggestionService
-    from services.service_factory import ServiceFactory
+    from ai_shopify_search.services.ai_search_service import AISearchService
+    from ai_shopify_search.services.cache_service import CacheService
+    from ai_shopify_search.services.analytics_service import AnalyticsService
+
+    from ai_shopify_search.services.suggestion_service import SuggestionService
+    from ai_shopify_search.services.service_factory import ServiceFactory
     
     print("✅ All service imports successful")
 
@@ -188,7 +188,7 @@ def test_api_imports():
     print("=" * 25)
     
     # Test API imports
-    from api.products_v2 import router
+    from ai_shopify_search.api.products_v2 import router
     
     print("✅ All API imports successful")
 

@@ -13,12 +13,12 @@ import time
 from datetime import datetime, timedelta
 
 from main import app
-from core.database import SessionLocal
-from core.models import Product, SearchAnalytics, SearchClick
-from services.service_factory import service_factory
-from utils.privacy import anonymize_ip, sanitize_user_agent, generate_session_id
-from utils.validation import sanitize_search_query, validate_price_range
-from utils.error_handling import handle_errors
+from ai_shopify_search.core.database import SessionLocal
+from ai_shopify_search.core.models import Product, SearchAnalytics, SearchClick
+from ai_shopify_search.services.service_factory import service_factory
+from ai_shopify_search.utils.privacy import anonymize_ip, sanitize_user_agent, generate_session_id
+from ai_shopify_search.utils.validation import sanitize_search_query, validate_price_range
+from ai_shopify_search.utils.error_handling import handle_errors
 
 
 @pytest.mark.skip(reason="Integration test requires external dependencies not available in CI environment")
@@ -103,7 +103,7 @@ class TestSecurityPrivacyIntegration:
     
     def test_data_retention_compliance(self, client, db_session, sample_products):
         """Test data retention compliance."""
-        from utils.privacy import DataRetentionManager
+        from ai_shopify_search.utils.privacy import DataRetentionManager
         
         retention_manager = DataRetentionManager()
         
@@ -383,7 +383,7 @@ class TestSecurityPrivacyIntegration:
     
     def test_secure_configuration_integration(self):
         """Test secure configuration management."""
-        from config import settings
+        from ai_shopify_search.core.config import settings
         
         # Verify sensitive configuration is not exposed
         config_vars = vars(settings)

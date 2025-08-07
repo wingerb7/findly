@@ -9,7 +9,7 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent))
 
-from features.store_profile import StoreProfileGenerator
+from ai_shopify_search.features.store_profile import StoreProfileGenerator
 
 def test_store_profiles():
     """Test the store profile system functionality."""

@@ -18,11 +18,11 @@ class TestModularSearchService:
     @pytest.fixture
     def search_service(self):
         """Create a ModularSearchService instance with mocked dependencies"""
-        with patch('search_service_modular.service_factory') as mock_factory:
+        with patch('ai_shopify_search.ai_shopify_search.search_service_modular.service_factory') as mock_factory:
             # Mock all service dependencies
             mock_factory.get_ai_search_service.return_value = AsyncMock()
             mock_factory.get_suggestion_service.return_value = AsyncMock()
-            mock_factory.get_autocomplete_service.return_value = AsyncMock()
+
             mock_factory.get_cache_service.return_value = AsyncMock()
             mock_factory.get_analytics_service.return_value = AsyncMock()
             
@@ -261,22 +261,7 @@ class TestModularSearchService:
         assert suggestions_response["query"] == "test"
     
     # Additional Method Tests
-    @pytest.mark.asyncio
-    async def test_get_autocomplete_success(self, search_service, mock_db):
-        """Test successful autocomplete"""
-        # Arrange
-        expected_suggestions = ["shirt", "shirts", "shirtless"]
-        search_service.autocomplete_service.get_autocomplete_suggestions.return_value = expected_suggestions
-        
-        # Act
-        result = await search_service.get_autocomplete(
-            db=mock_db,
-            query="shi"
-        )
-        
-        # Assert
-        assert result == expected_suggestions
-        search_service.autocomplete_service.get_autocomplete_suggestions.assert_called_once()
+
     
     @pytest.mark.asyncio
     async def test_get_popular_suggestions(self, search_service, mock_db):

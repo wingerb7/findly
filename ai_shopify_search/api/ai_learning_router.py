@@ -11,8 +11,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
-from core.database import get_db
-from services.service_factory import (
+from ai_shopify_search.core.database import get_db
+from ai_shopify_search.services.service_factory import (
     get_transfer_learning_service, get_knowledge_base_service,
     get_baseline_generator_service, get_pattern_learning_service
 )

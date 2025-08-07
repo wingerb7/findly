@@ -145,7 +145,7 @@ class TestBackgroundTaskUtils:
     @pytest.mark.asyncio
     async def test_submit_data_cleanup_task(self):
         """Test submitting data cleanup task."""
-        with patch('background_tasks.background_task_manager') as mock_manager:
+        with patch('ai_shopify_search.ai_shopify_search.background_tasks.background_task_manager') as mock_manager:
             mock_manager.submit_task = AsyncMock(return_value="task_123")
             
             task_id = await BackgroundTaskUtils.submit_data_cleanup_task()
@@ -156,7 +156,7 @@ class TestBackgroundTaskUtils:
     @pytest.mark.asyncio
     async def test_submit_cache_warmup_task(self):
         """Test submitting cache warmup task."""
-        with patch('background_tasks.background_task_manager') as mock_manager:
+        with patch('ai_shopify_search.ai_shopify_search.background_tasks.background_task_manager') as mock_manager:
             mock_manager.submit_task = AsyncMock(return_value="task_456")
             
             task_id = await BackgroundTaskUtils.submit_cache_warmup_task()
@@ -167,7 +167,7 @@ class TestBackgroundTaskUtils:
     @pytest.mark.asyncio
     async def test_submit_bulk_operation_task(self):
         """Test submitting bulk operation task."""
-        with patch('background_tasks.background_task_manager') as mock_manager:
+        with patch('ai_shopify_search.ai_shopify_search.background_tasks.background_task_manager') as mock_manager:
             mock_manager.submit_task = AsyncMock(return_value="task_789")
             
             data = [{"id": 1}, {"id": 2}]
@@ -182,7 +182,7 @@ class TestDecorators:
     @pytest.mark.asyncio
     async def test_background_task_decorator(self):
         """Test @background_task decorator."""
-        with patch('background_tasks.background_task_manager') as mock_manager:
+        with patch('ai_shopify_search.ai_shopify_search.background_tasks.background_task_manager') as mock_manager:
             mock_manager.submit_task = AsyncMock(return_value="task_123")
             
             @background_task("decorated_task", TaskPriority.HIGH)

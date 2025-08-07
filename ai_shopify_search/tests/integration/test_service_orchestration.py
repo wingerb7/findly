@@ -10,16 +10,16 @@ from sqlalchemy.orm import Session
 import json
 import time
 
-from core.database import SessionLocal
-from core.models import Product, SearchAnalytics, SearchClick
-from services.service_factory import service_factory
-from services.ai_search_service import AISearchService
-from services.cache_service import CacheService
-from services.analytics_service import AnalyticsService
-from services.suggestion_service import SuggestionService
-from services.autocomplete_service import AutocompleteService
-from utils.privacy import anonymize_ip
-from utils.validation import sanitize_search_query
+from ai_shopify_search.core.database import SessionLocal
+from ai_shopify_search.core.models import Product, SearchAnalytics, SearchClick
+from ai_shopify_search.services.service_factory import service_factory
+from ai_shopify_search.services.ai_search_service import AISearchService
+from ai_shopify_search.services.cache_service import CacheService
+from ai_shopify_search.services.analytics_service import AnalyticsService
+from ai_shopify_search.services.suggestion_service import SuggestionService
+
+from ai_shopify_search.utils.privacy import anonymize_ip
+from ai_shopify_search.utils.validation import sanitize_search_query
 
 
 @pytest.mark.skip(reason="Integration test requires external dependencies not available in CI environment")
@@ -203,29 +203,7 @@ class TestServiceOrchestration:
         cached_suggestions = cache_service.get(cache_key)
         assert cached_suggestions is not None
     
-    def test_autocomplete_service_integration(self, db_session, sample_products):
-        """Test autocomplete service integration."""
-        autocomplete_service = service_factory.get_autocomplete_service()
-        cache_service = service_factory.get_cache_service()
-        
-        # Clear cache
-        cache_service.clear()
-        
-        # Get autocomplete suggestions
-        autocomplete = autocomplete_service.get_autocomplete(
-            db_session,
-            "orchestration",
-            limit=5
-        )
-        
-        assert autocomplete is not None
-        assert "suggestions" in autocomplete
-        assert len(autocomplete["suggestions"]) > 0
-        
-        # Verify cache was populated
-        cache_key = f"autocomplete:orchestration:5"
-        cached_autocomplete = cache_service.get(cache_key)
-        assert cached_autocomplete is not None
+
     
     def test_error_propagation_between_services(self, db_session, sample_products):
         """Test how errors propagate between services."""
@@ -360,7 +338,7 @@ class TestServiceOrchestration:
     
     def test_service_configuration_integration(self):
         """Test that services use consistent configuration."""
-        from config import settings
+        from ai_shopify_search.core.config import settings
         
         ai_service = service_factory.get_ai_search_service()
         cache_service = service_factory.get_cache_service()
@@ -371,7 +349,7 @@ class TestServiceOrchestration:
     
     def test_service_metrics_integration(self, db_session, sample_products):
         """Test that services properly integrate with metrics."""
-        from metrics import search_requests_total, search_duration_seconds
+        from ai_shopify_search.core.metrics import search_requests_total, search_duration_seconds
         
         ai_service = service_factory.get_ai_search_service()
         

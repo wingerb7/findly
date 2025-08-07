@@ -7,15 +7,16 @@ from sqlalchemy.pool import StaticPool
 from unittest.mock import Mock, patch
 import redis
 
-from main import app
-from core.database import Base, get_db
-from core.models import Product, SearchAnalytics, PopularSearch
-from core.cache_manager import cache_manager
-from core.analytics_manager import analytics_manager
-
 # Test database configuration - Force SQLite for testing
 import os
 os.environ['DATABASE_URL'] = "sqlite:///./test.db"
+
+# Import after setting environment variable
+from main import app
+from ai_shopify_search.core.database import Base, get_db
+from ai_shopify_search.core.models import Product, SearchAnalytics, PopularSearch
+from ai_shopify_search.core.cache_manager import cache_manager
+from ai_shopify_search.core.analytics_manager import analytics_manager
 
 # Force reload of models to pick up the new DATABASE_URL
 # Note: This can cause issues with SQLAlchemy table definitions
@@ -64,7 +65,7 @@ def client(db_session):
 @pytest.fixture(scope="function")
 def mock_redis():
     """Mock Redis for testing."""
-    with patch('ai_shopify_search.cache_manager.redis_client') as mock_redis:
+    with patch('ai_shopify_search.core.cache_manager.redis_client') as mock_redis:
         mock_redis.get.return_value = None
         mock_redis.setex.return_value = True
         mock_redis.keys.return_value = []
@@ -76,7 +77,7 @@ def mock_redis():
 @pytest.fixture(scope="function")
 def mock_embedding():
     """Mock embedding generation."""
-    with patch('ai_shopify_search.embeddings.generate_embedding') as mock_embed:
+    with patch('ai_shopify_search.core.embeddings.generate_embedding') as mock_embed:
         mock_embed.return_value = [0.1] * 1536  # Mock 1536-dimensional embedding
         yield mock_embed
 
@@ -121,11 +122,10 @@ def sample_analytics(db_session):
     """Create sample analytics data for testing."""
     analytics = [
         SearchAnalytics(
-            session_id="test-session-1",
             query="blue shirt",
             search_type="ai",
             filters={},
-            results_count=2,
+            result_count=2,
             page=1,
             limit=25,
             response_time_ms=150.0,
@@ -134,11 +134,10 @@ def sample_analytics(db_session):
             ip_address="127.0.0.1"
         ),
         SearchAnalytics(
-            session_id="test-session-2",
             query="black jeans",
             search_type="ai",
             filters={},
-            results_count=1,
+            result_count=1,
             page=1,
             limit=25,
             response_time_ms=120.0,
@@ -160,15 +159,11 @@ def sample_popular_searches(db_session):
     popular_searches = [
         PopularSearch(
             query="blue shirt",
-            search_count=10,
-            click_count=5,
-            avg_position_clicked=2.5
+            search_count=10
         ),
         PopularSearch(
             query="black jeans",
-            search_count=8,
-            click_count=3,
-            avg_position_clicked=1.8
+            search_count=8
         )
     ]
     

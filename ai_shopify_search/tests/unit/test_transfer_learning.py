@@ -9,7 +9,7 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent))
 
-from features.transfer_learning import TransferLearningEngine
+from ai_shopify_search.features.transfer_learning import TransferLearningEngine
 
 def test_transfer_learning():
     """Test the transfer learning engine functionality."""

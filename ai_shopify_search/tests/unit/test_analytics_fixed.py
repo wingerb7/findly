@@ -5,8 +5,8 @@ Tests the enhanced analytics tracking with null-safe logging.
 
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from analytics_manager import AnalyticsManager
-from utils.privacy import sanitize_log_data, anonymize_ip, sanitize_user_agent
+from ai_shopify_search.core.analytics_manager import AnalyticsManager
+from ai_shopify_search.utils.privacy import sanitize_log_data, anonymize_ip, sanitize_user_agent
 
 
 class TestAnalyticsManager:
@@ -57,7 +57,7 @@ class TestAnalyticsManager:
     
     def test_track_search_without_db(self, analytics_manager):
         """Test track_search method without database session (log-only mode)."""
-        with patch('analytics_manager.logger') as mock_logger:
+        with patch('ai_shopify_search.ai_shopify_search.analytics_manager.logger') as mock_logger:
             analytics_manager.track_search(
                 query="test query",
                 result_count=5,
@@ -81,7 +81,7 @@ class TestAnalyticsManager:
     
     def test_track_search_null_safe(self, analytics_manager):
         """Test track_search method with null values (null-safe)."""
-        with patch('analytics_manager.logger') as mock_logger:
+        with patch('ai_shopify_search.ai_shopify_search.analytics_manager.logger') as mock_logger:
             analytics_manager.track_search(
                 query="",
                 result_count=0,
@@ -101,7 +101,7 @@ class TestAnalyticsManager:
     def test_track_search_exception_handling(self, analytics_manager, mock_db):
         """Test track_search method handles exceptions gracefully."""
         with patch.object(analytics_manager, 'track_search_analytics', side_effect=Exception("Database error")):
-            with patch('analytics_manager.logger') as mock_logger:
+            with patch('ai_shopify_search.ai_shopify_search.analytics_manager.logger') as mock_logger:
                 # Should not raise exception
                 analytics_manager.track_search(
                     query="test query",
@@ -244,7 +244,7 @@ class TestAnalyticsIntegration:
         """Test that analytics logging integrates properly with privacy utils."""
         manager = AnalyticsManager()
         
-        with patch('analytics_manager.logger') as mock_logger:
+        with patch('ai_shopify_search.ai_shopify_search.analytics_manager.logger') as mock_logger:
             manager.track_search(
                 query="test query with special chars: <script>alert('xss')</script>",
                 result_count=10,

@@ -13,11 +13,11 @@ import json
 import time
 
 from main import app
-from core.database import get_db, SessionLocal
-from core.models import Product, SearchAnalytics
-from services.service_factory import service_factory
-from utils.privacy import anonymize_ip
-from utils.validation import sanitize_search_query
+from ai_shopify_search.core.database import get_db, SessionLocal
+from ai_shopify_search.core.models import Product, SearchAnalytics
+from ai_shopify_search.services.service_factory import service_factory
+from ai_shopify_search.utils.privacy import anonymize_ip
+from ai_shopify_search.utils.validation import sanitize_search_query
 
 
 @pytest.mark.skip(reason="Integration test requires external dependencies not available in CI environment")
@@ -346,8 +346,8 @@ class TestFullSearchFlow:
     @pytest.mark.asyncio
     async def test_async_search_flow(self, db_session, sample_products, mock_openai):
         """Test async search flow."""
-        from services.ai_search_service import AISearchService
-        from services.cache_service import CacheService
+        from ai_shopify_search.services.ai_search_service import AISearchService
+        from ai_shopify_search.services.cache_service import CacheService
         
         ai_service = service_factory.get_ai_search_service()
         cache_service = service_factory.get_cache_service()

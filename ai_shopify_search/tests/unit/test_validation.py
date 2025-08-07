@@ -5,7 +5,7 @@ Simple tests for utils/validation.py - only testing what actually exists.
 
 import pytest
 from pydantic import ValidationError
-from utils.validation import (
+from ai_shopify_search.utils.validation import (
     SearchQuery, AISearchQuery, AnalyticsQuery,
     sanitize_search_query, validate_price_range, validate_cache_key,
     generate_secure_cache_key, validate_api_key, validate_rate_limit_identifier,

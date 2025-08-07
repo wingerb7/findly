@@ -9,7 +9,7 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent))
 
-from analysis.baseline_generator import BaselineGenerator
+from ai_shopify_search.analysis.baseline_generator import BaselineGenerator
 
 def test_baseline_generator():
     """Test the baseline generator functionality."""

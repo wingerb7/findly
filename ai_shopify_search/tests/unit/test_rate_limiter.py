@@ -6,20 +6,20 @@ Simple tests for rate_limiter.py - only testing what actually exists.
 import pytest
 import time
 from unittest.mock import Mock, patch, MagicMock
-from rate_limiter import RateLimiter, rate_limiter
+from ai_shopify_search.core.rate_limiter import RateLimiter, rate_limiter
 
 class TestRateLimiter:
     """Test RateLimiter class."""
     
     def test_rate_limiter_initialization(self):
         """Test rate limiter initialization."""
-        with patch('rate_limiter.cache_manager') as mock_cache_manager:
+        with patch('ai_shopify_search.ai_shopify_search.rate_limiter.cache_manager') as mock_cache_manager:
             limiter = RateLimiter()
             assert limiter.cache_manager is not None
     
     def test_check_rate_limit_allowed(self):
         """Test rate limit check when request is allowed."""
-        with patch('rate_limiter.cache_manager') as mock_cache_manager:
+        with patch('ai_shopify_search.ai_shopify_search.rate_limiter.cache_manager') as mock_cache_manager:
             limiter = RateLimiter()
             mock_redis = Mock()
             mock_cache_manager.redis_client = mock_redis
@@ -45,7 +45,7 @@ class TestRateLimiter:
     
     def test_check_rate_limit_exceeded(self):
         """Test rate limit check when limit is exceeded."""
-        with patch('rate_limiter.cache_manager') as mock_cache_manager:
+        with patch('ai_shopify_search.ai_shopify_search.rate_limiter.cache_manager') as mock_cache_manager:
             limiter = RateLimiter()
             mock_redis = Mock()
             mock_cache_manager.redis_client = mock_redis
@@ -69,7 +69,7 @@ class TestRateLimiter:
     
     def test_check_rate_limit_no_existing_count(self):
         """Test rate limit check when no existing count."""
-        with patch('rate_limiter.cache_manager') as mock_cache_manager:
+        with patch('ai_shopify_search.ai_shopify_search.rate_limiter.cache_manager') as mock_cache_manager:
             limiter = RateLimiter()
             mock_redis = Mock()
             mock_cache_manager.redis_client = mock_redis
@@ -90,7 +90,7 @@ class TestRateLimiter:
     
     def test_check_rate_limit_redis_error(self):
         """Test rate limit check when Redis has error."""
-        with patch('rate_limiter.cache_manager') as mock_cache_manager:
+        with patch('ai_shopify_search.ai_shopify_search.rate_limiter.cache_manager') as mock_cache_manager:
             limiter = RateLimiter()
             mock_redis = Mock()
             mock_cache_manager.redis_client = mock_redis
@@ -110,7 +110,7 @@ class TestRateLimiter:
     
     def test_check_rate_limit_different_parameters(self):
         """Test rate limit check with different parameters."""
-        with patch('rate_limiter.cache_manager') as mock_cache_manager:
+        with patch('ai_shopify_search.ai_shopify_search.rate_limiter.cache_manager') as mock_cache_manager:
             limiter = RateLimiter()
             mock_redis = Mock()
             mock_cache_manager.redis_client = mock_redis
@@ -187,7 +187,7 @@ class TestRateLimiterIntegration:
     
     def test_complete_rate_limit_workflow(self):
         """Test complete rate limit workflow."""
-        with patch('rate_limiter.cache_manager') as mock_cache_manager:
+        with patch('ai_shopify_search.ai_shopify_search.rate_limiter.cache_manager') as mock_cache_manager:
             limiter = RateLimiter()
             mock_redis = Mock()
             mock_cache_manager.redis_client = mock_redis
@@ -229,7 +229,7 @@ class TestRateLimiterIntegration:
     
     def test_rate_limit_with_different_identifiers(self):
         """Test rate limiting with different identifiers."""
-        with patch('rate_limiter.cache_manager') as mock_cache_manager:
+        with patch('ai_shopify_search.ai_shopify_search.rate_limiter.cache_manager') as mock_cache_manager:
             limiter = RateLimiter()
             mock_redis = Mock()
             mock_cache_manager.redis_client = mock_redis
@@ -254,14 +254,14 @@ class TestRateLimiterIntegration:
     
     def test_rate_limit_window_calculation(self):
         """Test rate limit window calculation."""
-        with patch('rate_limiter.cache_manager') as mock_cache_manager:
+        with patch('ai_shopify_search.ai_shopify_search.rate_limiter.cache_manager') as mock_cache_manager:
             limiter = RateLimiter()
             mock_redis = Mock()
             mock_cache_manager.redis_client = mock_redis
             
             # Mock current time
             current_time = 1640995200  # Fixed timestamp
-            with patch('time.time', return_value=current_time):
+            with patch('ai_shopify_search.ai_shopify_search.time.time', return_value=current_time):
                 mock_redis.get.return_value = "5"
                 mock_redis.incr.return_value = 6
                 mock_redis.expire.return_value = True
@@ -277,7 +277,7 @@ class TestRateLimiterIntegration:
     
     def test_rate_limit_edge_cases(self):
         """Test rate limit edge cases."""
-        with patch('rate_limiter.cache_manager') as mock_cache_manager:
+        with patch('ai_shopify_search.ai_shopify_search.rate_limiter.cache_manager') as mock_cache_manager:
             limiter = RateLimiter()
             mock_redis = Mock()
             mock_cache_manager.redis_client = mock_redis

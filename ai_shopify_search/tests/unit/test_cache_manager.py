@@ -7,21 +7,21 @@ import pytest
 import json
 import hashlib
 from unittest.mock import Mock, patch, MagicMock
-from cache_manager import CacheManager, cache_manager
+from ai_shopify_search.core.cache_manager import CacheManager, cache_manager
 
 class TestCacheManager:
     """Test CacheManager class."""
     
     def test_cache_manager_initialization(self):
         """Test cache manager initialization."""
-        with patch('cache_manager.redis.Redis') as mock_redis:
+        with patch('ai_shopify_search.cache_manager.redis.Redis') as mock_redis:
             manager = CacheManager()
             assert manager.redis_client is not None
             mock_redis.assert_called_once()
     
     def test_get_cache_key(self):
         """Test cache key generation."""
-        with patch('cache_manager.redis.Redis'):
+        with patch('ai_shopify_search.cache_manager.redis.Redis'):
             manager = CacheManager()
             
             # Test with simple parameters
@@ -39,7 +39,7 @@ class TestCacheManager:
     
     def test_get_cached_result_success(self):
         """Test successful cache retrieval."""
-        with patch('cache_manager.redis.Redis') as mock_redis:
+        with patch('ai_shopify_search.cache_manager.redis.Redis') as mock_redis:
             manager = CacheManager()
             mock_redis_instance = Mock()
             manager.redis_client = mock_redis_instance
@@ -55,7 +55,7 @@ class TestCacheManager:
     
     def test_get_cached_result_not_found(self):
         """Test cache retrieval when key doesn't exist."""
-        with patch('cache_manager.redis.Redis') as mock_redis:
+        with patch('ai_shopify_search.cache_manager.redis.Redis') as mock_redis:
             manager = CacheManager()
             mock_redis_instance = Mock()
             manager.redis_client = mock_redis_instance
@@ -70,7 +70,7 @@ class TestCacheManager:
     
     def test_get_cached_result_error(self):
         """Test cache retrieval with error."""
-        with patch('cache_manager.redis.Redis') as mock_redis:
+        with patch('ai_shopify_search.cache_manager.redis.Redis') as mock_redis:
             manager = CacheManager()
             mock_redis_instance = Mock()
             manager.redis_client = mock_redis_instance
@@ -84,7 +84,7 @@ class TestCacheManager:
     
     def test_set_cached_result_success(self):
         """Test successful cache storage."""
-        with patch('cache_manager.redis.Redis') as mock_redis:
+        with patch('ai_shopify_search.cache_manager.redis.Redis') as mock_redis:
             manager = CacheManager()
             mock_redis_instance = Mock()
             manager.redis_client = mock_redis_instance
@@ -99,7 +99,7 @@ class TestCacheManager:
     
     def test_set_cached_result_with_default_ttl(self):
         """Test cache storage with default TTL."""
-        with patch('cache_manager.redis.Redis') as mock_redis:
+        with patch('ai_shopify_search.cache_manager.redis.Redis') as mock_redis:
             manager = CacheManager()
             mock_redis_instance = Mock()
             manager.redis_client = mock_redis_instance
@@ -115,7 +115,7 @@ class TestCacheManager:
     
     def test_set_cached_result_error(self):
         """Test cache storage with error."""
-        with patch('cache_manager.redis.Redis') as mock_redis:
+        with patch('ai_shopify_search.cache_manager.redis.Redis') as mock_redis:
             manager = CacheManager()
             mock_redis_instance = Mock()
             manager.redis_client = mock_redis_instance
@@ -130,7 +130,7 @@ class TestCacheManager:
     
     def test_invalidate_product_cache_success(self):
         """Test successful product cache invalidation."""
-        with patch('cache_manager.redis.Redis') as mock_redis:
+        with patch('ai_shopify_search.cache_manager.redis.Redis') as mock_redis:
             manager = CacheManager()
             mock_redis_instance = Mock()
             manager.redis_client = mock_redis_instance
@@ -146,7 +146,7 @@ class TestCacheManager:
     
     def test_invalidate_product_cache_no_keys(self):
         """Test product cache invalidation with no keys."""
-        with patch('cache_manager.redis.Redis') as mock_redis:
+        with patch('ai_shopify_search.cache_manager.redis.Redis') as mock_redis:
             manager = CacheManager()
             mock_redis_instance = Mock()
             manager.redis_client = mock_redis_instance
@@ -161,7 +161,7 @@ class TestCacheManager:
     
     def test_invalidate_product_cache_error(self):
         """Test product cache invalidation with error."""
-        with patch('cache_manager.redis.Redis') as mock_redis:
+        with patch('ai_shopify_search.cache_manager.redis.Redis') as mock_redis:
             manager = CacheManager()
             mock_redis_instance = Mock()
             manager.redis_client = mock_redis_instance
@@ -174,7 +174,7 @@ class TestCacheManager:
     
     def test_get_cache_stats_success(self):
         """Test successful cache statistics retrieval."""
-        with patch('cache_manager.redis.Redis') as mock_redis:
+        with patch('ai_shopify_search.cache_manager.redis.Redis') as mock_redis:
             manager = CacheManager()
             mock_redis_instance = Mock()
             manager.redis_client = mock_redis_instance
@@ -186,9 +186,9 @@ class TestCacheManager:
                 ["ai_search:1"]  # ai_search keys
             ]
             
-            with patch('cache_manager.SEARCH_CACHE_TTL', 300):
-                with patch('cache_manager.AI_SEARCH_CACHE_TTL', 600):
-                    with patch('cache_manager.CACHE_TTL', 900):
+            with patch('ai_shopify_search.ai_shopify_search.cache_manager.SEARCH_CACHE_TTL', 300):
+                with patch('ai_shopify_search.ai_shopify_search.cache_manager.AI_SEARCH_CACHE_TTL', 600):
+                    with patch('ai_shopify_search.ai_shopify_search.cache_manager.CACHE_TTL', 900):
                         stats = manager.get_cache_stats()
             
             assert stats["total_cache_keys"] == 2
@@ -200,7 +200,7 @@ class TestCacheManager:
     
     def test_get_cache_stats_error(self):
         """Test cache statistics retrieval with error."""
-        with patch('cache_manager.redis.Redis') as mock_redis:
+        with patch('ai_shopify_search.cache_manager.redis.Redis') as mock_redis:
             manager = CacheManager()
             mock_redis_instance = Mock()
             manager.redis_client = mock_redis_instance
@@ -214,7 +214,7 @@ class TestCacheManager:
     
     def test_clear_cache_success(self):
         """Test successful cache clearing."""
-        with patch('cache_manager.redis.Redis') as mock_redis:
+        with patch('ai_shopify_search.cache_manager.redis.Redis') as mock_redis:
             manager = CacheManager()
             mock_redis_instance = Mock()
             manager.redis_client = mock_redis_instance
@@ -231,7 +231,7 @@ class TestCacheManager:
     
     def test_clear_cache_error(self):
         """Test cache clearing with error."""
-        with patch('cache_manager.redis.Redis') as mock_redis:
+        with patch('ai_shopify_search.cache_manager.redis.Redis') as mock_redis:
             manager = CacheManager()
             mock_redis_instance = Mock()
             manager.redis_client = mock_redis_instance
@@ -264,7 +264,7 @@ class TestCacheManagerIntegration:
     
     def test_complete_cache_workflow(self):
         """Test complete cache workflow."""
-        with patch('cache_manager.redis.Redis') as mock_redis:
+        with patch('ai_shopify_search.cache_manager.redis.Redis') as mock_redis:
             manager = CacheManager()
             mock_redis_instance = Mock()
             manager.redis_client = mock_redis_instance
@@ -292,7 +292,7 @@ class TestCacheManagerIntegration:
     
     def test_cache_key_uniqueness(self):
         """Test that cache keys are unique for different parameters."""
-        with patch('cache_manager.redis.Redis'):
+        with patch('ai_shopify_search.cache_manager.redis.Redis'):
             manager = CacheManager()
             
             # Different parameters should generate different keys
@@ -310,7 +310,7 @@ class TestCacheManagerIntegration:
     
     def test_cache_with_complex_data(self):
         """Test cache with complex data structures."""
-        with patch('cache_manager.redis.Redis') as mock_redis:
+        with patch('ai_shopify_search.cache_manager.redis.Redis') as mock_redis:
             manager = CacheManager()
             mock_redis_instance = Mock()
             manager.redis_client = mock_redis_instance

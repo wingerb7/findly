@@ -8,11 +8,11 @@ import time
 from typing import Dict, Any, Optional, List
 from sqlalchemy.orm import Session
 from datetime import datetime, date, timedelta
-from core.models import (
+from ai_shopify_search.core.models import (
     SearchAnalytics, SearchClick, SearchPerformance, 
     PopularSearch, FacetUsage, QuerySuggestion, SearchCorrection
 )
-from utils.privacy import (
+from ai_shopify_search.utils.privacy import (
     anonymize_ip, sanitize_user_agent, generate_session_id, 
     is_session_expired, sanitize_log_data, DataRetentionManager, PRIVACY_CONFIG
 )
@@ -97,12 +97,18 @@ class AnalyticsService:
             await self._update_facet_usage(db, filters)
             await self._update_daily_performance(db, search_type, response_time_ms, cache_hit, results_count)
             
-            # Log with sanitized data
+            # Log with sanitized data including result_count
             logger.info(
                 f"Search analytics tracked: {sanitized_query} ({search_type}) - "
                 f"{results_count} results, {response_time_ms:.2f}ms, "
                 f"cache_hit={cache_hit}, ip={anonymized_ip}, ua={sanitized_user_agent}"
             )
+            
+            # Additional logging for result_count analysis
+            if results_count > 0:
+                logger.info(f"Result count analysis: {results_count} results for query '{sanitized_query[:30]}'")
+            else:
+                logger.info(f"No results found for query '{sanitized_query[:30]}'")
             
             return analytics.id
             

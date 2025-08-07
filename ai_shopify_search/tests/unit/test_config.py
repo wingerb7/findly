@@ -6,7 +6,7 @@ Simple tests for config.py - only testing what actually exists.
 import pytest
 import os
 from unittest.mock import patch, Mock
-from core.config import (
+from ai_shopify_search.core.config import (
     DATABASE_URL, DATABASE_POOL_SIZE, DATABASE_MAX_OVERFLOW,
     REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_PASSWORD,
     CACHE_TTL, SEARCH_CACHE_TTL, AI_SEARCH_CACHE_TTL,

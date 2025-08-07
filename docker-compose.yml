@@ -1,27 +1,66 @@
 version: '3.8'
 
 services:
-  # Main application
-  app:
-    build: .
+  # PostgreSQL with pgvector extension
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: findly-postgres
+    environment:
+      POSTGRES_DB: findly
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: findly-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Findly AI Search API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: findly-api
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/findly
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - ENVIRONMENT=development
+      - VERSION=1.0.0
+      - DEBUG=true
+      - LOG_LEVEL=INFO
     ports:
       - "8000:8000"
-    environment:
-      - DATABASE_URL=postgresql://findly:findly@postgres:5432/findly
-      - REDIS_URL=redis://redis:6379
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - SECRET_KEY=${SECRET_KEY}
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./reports:/app/reports
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ./logs:/app/logs
-      - ./data:/app/data
-    networks:
-      - findly-network
-    restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -29,50 +68,28 @@ services:
       retries: 3
       start_period: 40s
 
-  # PostgreSQL database
-  postgres:
-    image: postgres:15
-    environment:
-      - POSTGRES_DB=findly
-      - POSTGRES_USER=findly
-      - POSTGRES_PASSWORD=findly
+  # Load testing with Locust
+  locust:
+    image: locustio/locust:2.17.0
+    container_name: findly-locust
     ports:
-      - "5432:5432"
+      - "8089:8089"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
-    networks:
-      - findly-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U findly -d findly"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - ./load_test:/app
+    working_dir: /app
+    command: -f locustfile.py --host=http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
 
-  # Redis cache
-  redis:
-    image: redis:7.0-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - findly-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Prometheus monitoring
+  # Prometheus for metrics
   prometheus:
     image: prom/prometheus:latest
+    container_name: findly-prometheus
     ports:
       - "9090:9090"
     volumes:
-      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -81,47 +98,22 @@ services:
       - '--web.console.templates=/etc/prometheus/consoles'
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
-    networks:
-      - findly-network
-    restart: unless-stopped
 
-  # Grafana dashboard
+  # Grafana for visualization
   grafana:
     image: grafana/grafana:latest
+    container_name: findly-grafana
     ports:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./config/grafana_dashboard.json:/etc/grafana/provisioning/dashboards/dashboard.json
-    networks:
-      - findly-network
-    restart: unless-stopped
-    depends_on:
-      - prometheus
-
-  # Nginx reverse proxy (optional)
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./config/nginx.conf:/etc/nginx/nginx.conf
-      - ./config/ssl:/etc/nginx/ssl
-    networks:
-      - findly-network
-    restart: unless-stopped
-    depends_on:
-      - app
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
 
 volumes:
   postgres_data:
   redis_data:
   prometheus_data:
-  grafana_data:
-
-networks:
-  findly-network:
-    driver: bridge 
+  grafana_data: 

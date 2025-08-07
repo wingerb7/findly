@@ -5,7 +5,7 @@ Test script for rate limiting functionality in the enhanced benchmark.
 
 import asyncio
 import time
-from features.enhanced_benchmark_search import BenchmarkRateLimiter, BenchmarkCache, BENCHMARK_CONFIG
+from ai_shopify_search.features.enhanced_benchmark_search import BenchmarkRateLimiter, BenchmarkCache, BENCHMARK_CONFIG
 
 async def test_rate_limiter():
     """Test the rate limiter functionality."""
